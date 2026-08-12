@@ -125,7 +125,7 @@ const run = async (
   return { exitCode, stderr, stdout };
 };
 
-describe("blume translate", () => {
+describe("bedocs translate", () => {
   it("checks, translates, adopts, and settles into a no-op rerun", async () => {
     const root = await fixture();
     const bin = await fakeClaude(root, INSTALL_FR);

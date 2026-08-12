@@ -42,7 +42,7 @@ Reply with ONLY this JSON object on a single line, no markdown fences:
 
 /** The `--fix` handoff prompt: where the report is and the ground rules. */
 export const evalFixPrompt = (reportPath: string): string =>
-  `Fix the documentation gaps found by \`blume eval\` in this project.
+  `Fix the documentation gaps found by \`bedocs eval\` in this project.
 
 The full report is at ${reportPath}. It is JSON: each entry in \`eval.results\` with status "fail" is one question the documentation could not answer. Each carries the \`question\`, the \`expected\` facts, the judge's \`missing\` facts, and the reader agent's \`answer\` (what the docs currently convey). The matching \`diagnostics\` entry names the source \`file\` of the page that should answer it.
 
@@ -51,11 +51,11 @@ Work through every failed question:
 2. Edit the documentation so it states the missing facts explicitly. Add prose, not filler; keep the page's voice.
 3. Never delete questions from the evals file or weaken expected facts.
 
-When you are done, run \`blume eval\` to verify, and repeat until every question passes.`;
+When you are done, run \`bedocs eval\` to verify, and repeat until every question passes.`;
 
 /** The `eval init` prompt: draft a starter evals file from the docs. */
 export const initPrompt = (evalsPath: string): string =>
-  `Draft a starter evals file for \`blume eval\` in this documentation project.
+  `Draft a starter evals file for \`bedocs eval\` in this documentation project.
 
 Read the documentation source pages in this project and write ${evalsPath} with about 10 high-value questions a real user would ask — installation, configuration, deployment, and the project's headline features. For each question, list the expected facts a correct answer must state, grounded in what the documentation actually promises (never invent facts the docs don't state).
 
@@ -75,4 +75,4 @@ Rules:
 - Prefer questions whose answers live on one page; set \`routes\` to that page.
 - Keep ids unique and questions short.
 
-When you are done, print the file and suggest running \`blume eval\` to try it.`;
+When you are done, print the file and suggest running \`bedocs eval\` to try it.`;

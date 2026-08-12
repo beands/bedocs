@@ -225,9 +225,9 @@ describe("blumePackageJson", () => {
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "blume dev",
-    "build": "blume build",
-    "doctor": "blume doctor"
+    "dev": "bedocs dev",
+    "build": "bedocs build",
+    "doctor": "bedocs doctor"
   },
   "dependencies": {
     "blume": "^${getBlumeVersion()}"

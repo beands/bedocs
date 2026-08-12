@@ -241,7 +241,7 @@ describe("showBlumeErrorOverlay", () => {
       err: {
         id: "blume.config.ts",
         message:
-          "Blume found 1 error(s):\n\n[BLUME_CONFIG_INVALID] bad config\n  at blume.config.ts:5\n  fix: set it right\n  docs: https://useblume.dev/custom",
+          "BeDocs found 1 error(s):\n\n[BLUME_CONFIG_INVALID] bad config\n  at blume.config.ts:5\n  fix: set it right\n  docs: https://useblume.dev/custom",
         plugin: "blume",
         stack: "",
       },
@@ -274,7 +274,7 @@ describe("showBlumeErrorOverlay", () => {
         // null would change the equality check.
         // oxlint-disable-next-line sonarjs/no-undefined-assignment
         id: undefined,
-        message: "Blume found 1 error(s):\n\n[BLUME_UNMAPPED] boom",
+        message: "BeDocs found 1 error(s):\n\n[BLUME_UNMAPPED] boom",
         plugin: "blume",
         stack: "",
       },

@@ -3,7 +3,7 @@ import VercelAnalytics from "@vercel/analytics/astro";
 
 // Analytics scripts injected into <head>. PostHog and custom providers use the
 // inline-snippet house style (banner/theme/JSON-LD); Vercel uses its official
-// Astro component. Loads ONLY in production builds so `blume dev` stays clean
+// Astro component. Loads ONLY in production builds so `bedocs dev` stays clean
 // and local traffic never reaches your analytics.
 interface AnalyticsScript {
   attributes?: Record<string, string>;

@@ -29,7 +29,7 @@ const contentRoot = (document: HtmlDocument) => {
 /**
  * The `<a>` elements that sit in the page's prose rather than its chrome.
  *
- * This split is what makes the link graph mean anything. Blume renders a sidebar
+ * This split is what makes the link graph mean anything. BeDocs renders a sidebar
  * linking every nav page from every page, so a graph that treats a sidebar link
  * the same as a body link finds that every page has hundreds of inbound links
  * and no page is ever an orphan.
@@ -155,7 +155,7 @@ export const buildSnapshot = (options: {
         .filter((id) => id.length > 0)
     ),
     images: collectAssets(document, "img[src]", "src"),
-    // A page is indexable unless it says otherwise. Blume only ever emits
+    // A page is indexable unless it says otherwise. BeDocs only ever emits
     // `noindex` (never `nofollow`), but an ejected layout could emit either.
     indexable: !robots?.getAttribute("content")?.includes("noindex"),
     jsonld,

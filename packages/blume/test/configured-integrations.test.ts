@@ -154,7 +154,7 @@ const waitForLine = (
 const generatedConfigHash = async (root: string): Promise<string | null> => {
   const config = await readFile(join(root, ".blume/astro.config.mjs"), "utf-8");
   return (
-    config.match(/Blume config source SHA-256: (?<hash>[a-f0-9]{64})/u)?.groups
+    config.match(/BeDocs config source SHA-256: (?<hash>[a-f0-9]{64})/u)?.groups
       ?.hash ?? null
   );
 };

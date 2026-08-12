@@ -87,7 +87,7 @@ export interface BlumeRoute {
   title: string;
 }
 
-/** Site-wide settings derived from `blume.config` — the `config` field of {@link BlumeData}. */
+/** Site-wide settings derived from `bedocs.config` — the `config` field of {@link BlumeData}. */
 export interface BlumeDataConfig {
   analytics: NonNullable<ResolvedConfig["analytics"]> | null;
   /** Apple touch icon, or `null` when none is configured/detected. */
@@ -171,7 +171,7 @@ export interface BlumeClientData {
   page: { route: string; title: string };
 }
 
-/** The `blume:data` module a Blume site's custom pages import. */
+/** The `blume:data` module a BeDocs site's custom pages import. */
 export interface BlumeData {
   config: BlumeDataConfig;
   feeds: BlumeFeed[];

@@ -161,7 +161,7 @@ describe("serveMcpStdio", () => {
   });
 });
 
-describe("blume mcp-stdio", () => {
+describe("bedocs mcp-stdio", () => {
   const dirs: string[] = [];
 
   afterAll(async () => {

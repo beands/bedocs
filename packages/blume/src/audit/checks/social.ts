@@ -8,7 +8,7 @@ import { normalizePath } from "../url.ts";
 const OG_REQUIRED = ["og:title", "og:type", "og:description"];
 
 /**
- * `og:url` must be an absolute URL, so Blume can only emit it once
+ * `og:url` must be an absolute URL, so BeDocs can only emit it once
  * `deployment.site` is known. Requiring it on a site that hasn't set one would
  * report the same missing config on every page; SITE_NOT_SET says it once.
  */
@@ -126,7 +126,7 @@ const jsonLdProblems = (node: unknown): string[] => {
   return problems;
 };
 
-/** Structured data. We validate what Blume emits, and don't pretend to do more. */
+/** Structured data. We validate what BeDocs emits, and don't pretend to do more. */
 export const structuredDataChecks: CheckModule = {
   category: "structured-data",
   run(context) {

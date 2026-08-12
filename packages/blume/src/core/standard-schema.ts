@@ -1,10 +1,10 @@
 /**
  * The Standard Schema interface (https://standardschema.dev), the minimal
  * `~standard` surface shared by Zod 3.24+, Zod 4, Valibot, ArkType, and
- * friends. Blume accepts user-supplied validation schemas (e.g.
+ * friends. BeDocs accepts user-supplied validation schemas (e.g.
  * `frontmatter.extend`) through this interface instead of Zod's own types:
- * `blume.config.ts` imports zod from the *consumer's* node_modules, which may
- * be a different major version than the zod Blume bundles, and calling Zod
+ * `bedocs.config.ts` imports zod from the *consumer's* node_modules, which may
+ * be a different major version than the zod BeDocs bundles, and calling Zod
  * methods (`.extend()`, `.safeParse()`) across instances is unsupported. The
  * `~standard.validate` contract is version- and library-agnostic.
  */

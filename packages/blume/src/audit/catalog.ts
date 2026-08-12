@@ -2,17 +2,17 @@ import type { Diagnostic } from "../core/types.ts";
 import type { CheckMeta } from "./types.ts";
 
 /**
- * Every check `blume audit` can report.
+ * Every check `bedocs audit` can report.
  *
  * This is deliberately ~76 checks, not the ~173 rows an Ahrefs site audit
  * lists. Ahrefs crawls the open web, so its list is padded with rows that are
- * structurally impossible for an Astro-built Blume site, and shipping those as
+ * structurally impossible for an Astro-built BeDocs site, and shipping those as
  * permanent zeroes teaches people to ignore the report. What was dropped, and
  * why:
  *
  * - **Every `nofollow` check** (~6 rows, including all four "nofollow incoming
  *   internal links" variants). `RootLayout.astro` only ever emits `<meta
- *   name="robots" content="noindex">`; Blume has no way to emit `nofollow`, so
+ *   name="robots" content="noindex">`; BeDocs has no way to emit `nofollow`, so
  *   they could never fire. Hand-written `rel="nofollow"` in MDX is still caught
  *   by `INTERNAL_LINK_NOFOLLOW`.
  * - **The whole JavaScript + CSS section** (~11 rows: "JS redirects", "CSS
@@ -22,18 +22,18 @@ import type { CheckMeta } from "./types.ts";
  * - **Ahrefs' indexable/non-indexable duplicates** (~20 rows). Carried instead
  *   by `PageSnapshot.indexable` on a single finding.
  * - **"Only one dofollow incoming internal link"** and **"page has no outgoing
- *   links"**. Blume's sidebar links every page from every page, so these fire on
+ *   links"**. BeDocs's sidebar links every page from every page, so these fire on
  *   ~100% of pages. Pure noise.
  * - **"3XX redirect"** and **"302 redirect"**: having a redirect is inventory,
  *   not a finding. **"HTTP to HTTPS redirect"** is correct behavior.
  * - **"Font size too small" / "tap targets too close" / "content not sized
  *   correctly"**: properties of the theme, identical on every page. A regression
- *   there is a Blume bug, not a user finding.
+ *   there is a BeDocs bug, not a user finding.
  * - **"Document uses plugins"** and **"poor FID"** (FID is deprecated; lab
  *   Lighthouse cannot measure INP, so we report TBT and say so).
  * - **"More than three parameters in URL"**: a static docs site emits no query
  *   strings in its own links.
- * - **"Page in multiple sitemaps"**: Blume emits exactly one sitemap.
+ * - **"Page in multiple sitemaps"**: BeDocs emits exactly one sitemap.
  * - **Core Web Vitals** (LCP/CLS/INP): these need a real browser. Rather than
  *   ship a `--lighthouse` flag that silently reports nothing, they are deferred
  *   until Lighthouse is actually wired in. A tier the audit cannot run is worse
@@ -95,7 +95,7 @@ export const CHECKS = [
   },
   {
     category: "content",
-    fix: "Give the page a `title` — Blume renders it as the page's <h1>.",
+    fix: "Give the page a `title` — BeDocs renders it as the page's <h1>.",
     id: "BLUME_AUDIT_H1_MISSING",
     severity: "warning",
     tier: "static",
@@ -103,7 +103,7 @@ export const CHECKS = [
   },
   {
     category: "content",
-    fix: "Demote the extra `# Heading` in the body to `##` — Blume already renders `title` as the h1.",
+    fix: "Demote the extra `# Heading` in the body to `##` — BeDocs already renders `title` as the h1.",
     id: "BLUME_AUDIT_H1_MULTIPLE",
     severity: "warning",
     tier: "static",
@@ -171,7 +171,7 @@ export const CHECKS = [
   // Indexability
   {
     category: "indexability",
-    fix: "Set `deployment.site` in blume.config.ts to the site's public URL.",
+    fix: "Set `deployment.site` in bedocs.config.ts to the site's public URL.",
     id: "BLUME_AUDIT_SITE_NOT_SET",
     severity: "warning",
     tier: "static",
@@ -179,7 +179,7 @@ export const CHECKS = [
   },
   {
     category: "indexability",
-    fix: "Audit a production-like build (e.g. `VERCEL=1 VERCEL_PROJECT_PRODUCTION_URL=<host> blume build`) or the deployment itself with `--url <origin>`. Do not hardcode `deployment.site` — the platform sets it on every deploy.",
+    fix: "Audit a production-like build (e.g. `VERCEL=1 VERCEL_PROJECT_PRODUCTION_URL=<host> bedocs build`) or the deployment itself with `--url <origin>`. Do not hardcode `deployment.site` — the platform sets it on every deploy.",
     id: "BLUME_AUDIT_SITE_INFERRED_AT_DEPLOY",
     severity: "info",
     tier: "static",
@@ -203,7 +203,7 @@ export const CHECKS = [
   },
   {
     category: "indexability",
-    fix: "Set `deployment.site` so Blume can emit absolute canonical URLs.",
+    fix: "Set `deployment.site` so BeDocs can emit absolute canonical URLs.",
     id: "BLUME_AUDIT_CANONICAL_MISSING",
     severity: "warning",
     tier: "static",
@@ -351,7 +351,7 @@ export const CHECKS = [
   },
   {
     category: "redirects",
-    fix: "Use a real redirect in `blume.config.ts` instead of a meta refresh.",
+    fix: "Use a real redirect in `bedocs.config.ts` instead of a meta refresh.",
     id: "BLUME_AUDIT_META_REFRESH",
     severity: "warning",
     tier: "static",
@@ -377,7 +377,7 @@ export const CHECKS = [
   // Social
   {
     category: "social",
-    fix: "Add a `description` — Blume fills the rest of the Open Graph tags for you.",
+    fix: "Add a `description` — BeDocs fills the rest of the Open Graph tags for you.",
     id: "BLUME_AUDIT_OG_INCOMPLETE",
     severity: "warning",
     tier: "static",
@@ -417,7 +417,7 @@ export const CHECKS = [
   },
   {
     category: "social",
-    fix: "Set `seo.x.handle` in blume.config.ts so X can attribute the card.",
+    fix: "Set `seo.x.handle` in bedocs.config.ts so X can attribute the card.",
     id: "BLUME_AUDIT_TWITTER_CARD_INCOMPLETE",
     severity: "warning",
     tier: "static",
@@ -665,7 +665,7 @@ export const CHECKS = [
   },
 
   // AI discovery. `llms.txt` is the sitemap of the AI era, and no SEO crawler
-  // audits it — they audit for Google. Blume emits it, so Blume checks it.
+  // audits it — they audit for Google. BeDocs emits it, so BeDocs checks it.
   {
     category: "ai",
     fix: "Rebuild — `ai.llmsTxt` is enabled but the build has no llms.txt. If that's intentional, set `ai.llmsTxt: false`.",
@@ -692,7 +692,7 @@ export const CHECKS = [
   },
   // DNS-AID (draft-mozleywilliams-dnsop-dnsaid) lives in the DNS zone, not the
   // build, so unlike the llms.txt checks these can only observe and advise —
-  // hence `info`: publishing the records is a DNS-provider action Blume can't
+  // hence `info`: publishing the records is a DNS-provider action BeDocs can't
   // take for you, and the draft is young enough that absence is the norm.
   {
     category: "ai",
@@ -711,7 +711,7 @@ export const CHECKS = [
     title: "DNS-AID records are not DNSSEC-authenticated",
   },
 
-  // Structured data. Note we validate only what Blume itself emits — we do not
+  // Structured data. Note we validate only what BeDocs itself emits — we do not
   // claim Google-rich-results or full schema.org validation (the former is an
   // undocumented network API, the latter a vocabulary we don't bundle).
   {
@@ -806,7 +806,7 @@ export const checkMeta = (id: CheckId): CheckMeta => {
   return meta;
 };
 
-const DOCS_BASE = "https://useblume.dev/docs/reference/audit";
+const DOCS_BASE = "https://docs.beandsmedia.ru/docs/reference/audit";
 
 /** `BLUME_AUDIT_TITLE_TOO_LONG` -> `…/audit#title-too-long`. */
 export const checkDocsUrl = (id: CheckId): string =>

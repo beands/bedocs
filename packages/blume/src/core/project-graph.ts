@@ -30,13 +30,13 @@ export type BuildMode = "dev" | "build";
 
 /** CLI-supplied overrides applied over the loaded config (see `scanProject`). */
 export interface ConfigOverrides {
-  /** Override `content.root` (`blume dev --content-dir`). */
+  /** Override `content.root` (`bedocs dev --content-dir`). */
   contentRoot?: string;
-  /** Override `deployment.adapter` (`blume build --adapter`). */
+  /** Override `deployment.adapter` (`bedocs build --adapter`). */
   adapter?: ResolvedConfig["deployment"]["adapter"];
-  /** Override `deployment.base` (`blume build --base`). */
+  /** Override `deployment.base` (`bedocs build --base`). */
   base?: string;
-  /** Override `deployment.output` (`blume build --output`). */
+  /** Override `deployment.output` (`bedocs build --output`). */
   output?: ResolvedConfig["deployment"]["output"];
 }
 
@@ -63,7 +63,7 @@ const applyConfigOverrides = (
   };
 };
 
-/** Everything Blume knows about a project after a full scan. */
+/** Everything BeDocs knows about a project after a full scan. */
 export interface BlumeProject {
   mode: BuildMode;
   context: ProjectContext;
@@ -203,7 +203,7 @@ export const scanProject = async (
     refresh?: boolean;
     /** CLI overrides applied over the loaded config (e.g. `--output`). */
     overrides?: ConfigOverrides;
-    /** Relocate the generated runtime (e.g. `.blume-verify` for isolation). */
+    /** Relocate the generated runtime (e.g. `.bedocs-verify` for isolation). */
     runtimeDir?: string;
   } = {}
 ): Promise<BlumeProject> => {

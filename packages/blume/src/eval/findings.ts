@@ -3,7 +3,7 @@ import type { Diagnostic } from "../core/types.ts";
 import { locateQuestion } from "./schema.ts";
 import type { EvalQuestion } from "./schema.ts";
 
-const DOCS_URL = "https://useblume.dev/docs/reference/eval";
+const DOCS_URL = "https://docs.beandsmedia.ru/docs/reference/eval";
 
 /** Where a finding should anchor when no route hint matches a page. */
 export interface EvalsAnchor {
@@ -82,7 +82,7 @@ export const questionFinding = (
       }.`,
       severity: question.severity,
       suggestion:
-        "Rerun `blume eval`; if it persists, check the agent CLI installation and the failure detail.",
+        "Rerun `bedocs eval`; if it persists, check the agent CLI installation and the failure detail.",
       ...site,
     };
   }
@@ -97,7 +97,7 @@ export const questionFinding = (
     message: `Docs could not answer: "${question.question}"${missing}`,
     severity: question.severity,
     suggestion:
-      "State the missing facts on this page, then rerun `blume eval`.",
+      "State the missing facts on this page, then rerun `bedocs eval`.",
     ...site,
   };
 };

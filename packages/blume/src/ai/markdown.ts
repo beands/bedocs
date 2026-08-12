@@ -46,7 +46,7 @@ export const markdownTokenCount = (text: string): number =>
  * to plain Markdown for consumers that can't interpret JSX. `<Visibility>`
  * audiences are resolved for agents in both variants: web-only content is
  * removed, agents-only unwrapped. Relative image references are rewritten to
- * their served `/blume-assets/content/…` URLs in both variants too — an agent
+ * their served `/bedocs-assets/content/…` URLs in both variants too — an agent
  * fetches these endpoints by URL, where a colocated `./diagram.png` resolves
  * to nothing.
  */

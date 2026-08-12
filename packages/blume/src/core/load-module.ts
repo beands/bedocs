@@ -1,7 +1,7 @@
 import { createJiti } from "jiti";
 
 /**
- * Create a loader for user-authored ESM/TS modules (`blume.config.ts`,
+ * Create a loader for user-authored ESM/TS modules (`bedocs.config.ts`,
  * `meta.ts`). One jiti instance is reused across every file the returned loader
  * is called with. `moduleCache: false` ensures edits are picked up on each load,
  * which is what makes dev-server regeneration reflect config/meta changes.

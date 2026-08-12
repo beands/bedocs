@@ -5,7 +5,7 @@
  *
  * Dev regeneration (`scanProject` + `generateRuntime`) is expensive on a large
  * project — a full content re-scan that allocates big strings. A plain debounce
- * still lets a fast burst of watch events (or, before it was fixed, a `.blume/`
+ * still lets a fast burst of watch events (or, before it was fixed, a `.bedocs/`
  * watch storm) start a new scan before the previous finished, piling up
  * overlapping scans until the heap is exhausted (observed as an OOM after
  * minutes of looping). Single-flighting bounds it to one scan at a time while

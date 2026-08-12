@@ -1,11 +1,11 @@
 /**
- * Static metadata for the MCP tools Blume exposes. Shared by the server (which
+ * Static metadata for the MCP tools BeDocs exposes. Shared by the server (which
  * pairs each entry with a Zod input schema and handler) and the `.well-known`
  * discovery documents, so tool names and descriptions never drift between the
  * live server and its advertised capabilities.
  */
 
-/** A read-only, non-mutating tool hint set (every Blume tool is read-only). */
+/** A read-only, non-mutating tool hint set (every BeDocs tool is read-only). */
 const READ_ONLY = { openWorldHint: false, readOnlyHint: true } as const;
 
 export interface McpToolMeta {

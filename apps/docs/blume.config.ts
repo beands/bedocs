@@ -11,7 +11,7 @@ export default defineConfig({
     vercel: true,
   },
   banner: {
-    content: "Blume is now publicly available.",
+    content: "BeDocs is now publicly available.",
     dismissible: true,
     id: "beta",
   },
@@ -40,8 +40,9 @@ export default defineConfig({
     repo: "blume",
   },
   i18n: {
-    defaultLocale: "en",
+    defaultLocale: "ru",
     locales: [
+      { code: "ru", label: "Русский" },
       { code: "en", label: "English" },
       { code: "de", label: "Deutsch", style: "Informal du-form" },
       { code: "hi", label: "हिन्दी", style: "Formal आप-form" },
@@ -64,6 +65,7 @@ export default defineConfig({
           hi: "दस्तावेज़",
           ja: "ドキュメント",
           pt: "Documentação",
+          ru: "Документация",
         },
         path: "/docs",
       },
@@ -75,6 +77,7 @@ export default defineConfig({
           hi: "चेंजलॉग",
           ja: "変更履歴",
           pt: "Alterações",
+          ru: "Изменения",
         },
         path: "/changelog",
       },
@@ -87,5 +90,5 @@ export default defineConfig({
   theme: {
     accent: "teal",
   },
-  title: "Blume",
+  title: "BeDocs",
 });

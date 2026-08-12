@@ -6,12 +6,12 @@ import type { ResolvedConfig } from "../core/schema.ts";
 import { searchProviderMeta } from "../search/providers.ts";
 
 /**
- * The `blume build`-only artifacts this project's config actually produces, as
+ * The `bedocs build`-only artifacts this project's config actually produces, as
  * notice lines for the eject command. After an eject the build script runs
  * plain `astro build`, which emits none of them — printing the config-aware
  * list makes the loss explicit instead of silent (a Pagefind site would
  * otherwise eject into a build whose search fails at runtime). Each gate
- * mirrors the artifact's producer in `blume build` (cli/commands/build.ts).
+ * mirrors the artifact's producer in `bedocs build` (cli/commands/build.ts).
  */
 export const droppedArtifactNotices = (config: ResolvedConfig): string[] => {
   const notices: string[] = [];
@@ -49,8 +49,8 @@ export const droppedArtifactNotices = (config: ResolvedConfig): string[] => {
 
 /**
  * Rewrite the project's package.json scripts to run Astro directly. After an
- * eject the Blume CLI no longer manages the runtime, so scaffolded scripts like
- * `"dev": "blume dev"` would rebuild the removed `.blume` tree instead of
+ * eject the BeDocs CLI no longer manages the runtime, so scaffolded scripts like
+ * `"dev": "bedocs dev"` would rebuild the removed `.bedocs` tree instead of
  * serving the ejected app. A missing or unreadable package.json is left alone.
  */
 export const updatePackageScripts = async (root: string): Promise<void> => {

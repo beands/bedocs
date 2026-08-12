@@ -4,7 +4,7 @@ import type { Diagnostic } from "../core/types.ts";
 
 /**
  * Warn early when an enabled feature needs a secret env var that isn't set, so
- * the failure surfaces at `blume dev`/`build` instead of at the first request in
+ * the failure surfaces at `bedocs dev`/`build` instead of at the first request in
  * production. These are runtime secrets (the endpoint reads them on the server),
  * so this warns rather than hard-fails — the value may live only in the deploy
  * environment. Build-time secrets (search-index sync) already warn during sync.

@@ -13,7 +13,7 @@ import { isStandardSchema } from "./standard-schema.ts";
 import type { StandardSchema } from "./standard-schema.ts";
 
 /**
- * Public Blume schemas.
+ * Public BeDocs schemas.
  *
  * These are exported from `blume/schema` so migration tools, editor
  * integrations, and the runtime share a single source of validation truth.
@@ -90,7 +90,7 @@ const changelogMetaSchema = z.strictObject({
 /**
  * A post author: a bare name/handle, or an object with a name plus optional
  * avatar/URL. The object is passthrough so richer author metadata (social
- * handles, roles) survives untouched — Blume doesn't render authors yet, so
+ * handles, roles) survives untouched — BeDocs doesn't render authors yet, so
  * this exists to preserve the field (common on blog/changelog pages) rather
  * than have a strict scan reject it.
  */
@@ -198,7 +198,7 @@ export const folderMetaSchema = z.strictObject({
 export type FolderMeta = z.infer<typeof folderMetaSchema>;
 
 // ---------------------------------------------------------------------------
-// Project config (blume.config.ts)
+// Project config (bedocs.config.ts)
 // ---------------------------------------------------------------------------
 
 /** The logo mark: a single image path/URL, or light/dark variants with alt text. */
@@ -283,7 +283,7 @@ const sanitySourceSchema = z.object({
   /** Sanity API version (a date); default `2024-01-01`. */
   apiVersion: z.string().optional(),
   dataset: z.string(),
-  /** Field paths mapping a document onto Blume meta + body. */
+  /** Field paths mapping a document onto BeDocs meta + body. */
   fields: z
     .strictObject({
       body: z.string().optional(),
@@ -308,7 +308,7 @@ const notionSourceSchema = z.object({
   /** Opt-in dev polling interval (seconds); omit to freeze for the session. */
   pollInterval: z.number().positive().optional(),
   prefix: z.string().optional(),
-  /** Notion property names mapped onto Blume meta. */
+  /** Notion property names mapped onto BeDocs meta. */
   properties: z
     .strictObject({
       description: z.string().optional(),
@@ -348,7 +348,7 @@ const githubReleasesSourceSchema = z.strictObject({
 
 /**
  * A user-provided `ContentSource` instance, passed straight through from
- * `blume.config.ts`. This is the extension point that lets adapters with custom
+ * `bedocs.config.ts`. This is the extension point that lets adapters with custom
  * serializers (or any backend) ship without their SDKs touching core.
  */
 const customSourceSchema = z.object({
@@ -937,7 +937,7 @@ const localeSchema = z.strictObject({
   dir: z.enum(["ltr", "rtl"]).default("ltr"),
   label: z.string(),
   /**
-   * Freeform style guidance for `blume translate`, e.g. "Brazilian
+   * Freeform style guidance for `bedocs translate`, e.g. "Brazilian
    * Portuguese, informal você". Pins register and dialect from the first
    * translation and wins over an existing translation's style on reruns.
    */
@@ -945,13 +945,13 @@ const localeSchema = z.strictObject({
 });
 
 /**
- * Internationalization. Opt-in: when absent, Blume is single-locale and behaves
+ * Internationalization. Opt-in: when absent, BeDocs is single-locale and behaves
  * exactly as before. The default locale lives at the content root; other locales
  * are top-level directories named by `code` (the `dir` parser).
  */
 const i18nConfigSchema = z
   .strictObject({
-    defaultLocale: z.string().default("en"),
+    defaultLocale: z.string().default("ru"),
     /** Locale rendered for a missing translation; `null` disables fallback. */
     fallbackLocale: z.string().nullable().optional(),
     /** Drop the URL prefix for the default locale (`/`, `/fr/…`). Static-safe. */
@@ -1392,7 +1392,7 @@ const reactConfigSchema = z.strictObject({
 
 /**
  * A single spec rendered by the API reference. `spec` is a local path or an
- * `http(s)` URL (OpenAPI for the Blume renderer; OpenAPI or AsyncAPI for Scalar).
+ * `http(s)` URL (OpenAPI for the BeDocs renderer; OpenAPI or AsyncAPI for Scalar).
  */
 const openapiSourceSchema = z.strictObject({
   /** Include generated pages from this spec in llms.txt/llms-full.txt. */
@@ -1413,28 +1413,28 @@ export type OpenApiSource = z.input<typeof openapiSourceSchema>;
 
 /**
  * Arbitrary Scalar API-reference options forwarded verbatim to the generated
- * `<ScalarComponent>` (Scalar renderer only). A passthrough map — Blume doesn't
+ * `<ScalarComponent>` (Scalar renderer only). A passthrough map — BeDocs doesn't
  * mirror Scalar's full config surface — so keys like `localization`, `agent`,
  * `hideTestRequestButton`, or `orderSchemaPropertiesBy` all flow through. These
- * take precedence over Blume's own derived config (spec, theme), so this is a
+ * take precedence over BeDocs's own derived config (spec, theme), so this is a
  * full escape hatch; the dedicated `theme` field is the ergonomic shorthand.
  */
 const scalarConfigSchema = z.record(z.string(), z.unknown()).optional();
 
 /**
- * OpenAPI reference. By default (`renderer: "blume"`) Blume parses the spec with
+ * OpenAPI reference. By default (`renderer: "blume"`) BeDocs parses the spec with
  * Scalar's parser and renders its own UI: one real page per operation, grouped
  * by tag in the sidebar and included in site search, llms.txt, and OG. Set
  * `renderer: "scalar"` to fall back to the embedded Scalar SPA (a single
  * self-contained route that doesn't weave into the sidebar or search).
  */
 const openapiConfigSchema = z.strictObject({
-  /** Code-sample languages shown per operation (Blume renderer). */
+  /** Code-sample languages shown per operation (BeDocs renderer). */
   codeSamples: z.array(z.string()).default(["curl", "js", "python"]),
   enabled: z.boolean().default(false),
-  /** Start nested schema rows expanded rather than collapsed (Blume renderer). */
+  /** Start nested schema rows expanded rather than collapsed (BeDocs renderer). */
   expandSchemas: z.boolean().default(false),
-  /** Who renders the reference: Blume's own UI, or the embedded Scalar SPA. */
+  /** Who renders the reference: BeDocs's own UI, or the embedded Scalar SPA. */
   renderer: z.enum(["blume", "scalar"]).default("blume"),
   /** Where the reference mounts. */
   route: z.string().default("/reference"),

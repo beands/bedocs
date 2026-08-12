@@ -13,13 +13,13 @@ const SIDE_EFFECT_IMPORT =
   /(?<prefix>^[ \t]*import[ \t]+)(?<quote>["'])(?<spec>\.[^"']*)\k<quote>/gmu;
 
 /**
- * Rewrite a built-in component's relative imports to `blume/*` package
- * specifiers, so a copy installed by `blume add` resolves the rest of the
+ * Rewrite a built-in component's relative imports to `@beands/bedocs/*` package
+ * specifiers, so a copy installed by `bedocs add` resolves the rest of the
  * framework from the package instead of broken relative paths.
  *
  * `sourceFile` is the original file's absolute path and `srcRoot` the package
  * `src` directory; a relative import is resolved against the source, mapped to
- * its path under `src`, and re-emitted as `blume/<that path>`. Two specifiers
+ * its path under `src`, and re-emitted as `@beands/bedocs/<that path>`. Two specifiers
  * are left untouched: a self-reference (a component importing itself, e.g. the
  * recursive nav tree) stays relative so the copy recurses into the copy, and
  * anything resolving outside `src` is left as-is.
@@ -43,7 +43,7 @@ export const rewriteImports = (
     if (rel.startsWith("..")) {
       return match;
     }
-    return `${prefix}${quote}blume/${rel}${quote}`;
+    return `${prefix}${quote}@beands/bedocs/${rel}${quote}`;
   };
   return content
     .replaceAll(FROM_IMPORT, rewrite)

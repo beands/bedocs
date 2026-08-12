@@ -16,7 +16,7 @@ interface OverlayServer {
 }
 
 // Set on `astro:server:setup`; read by `showBlumeErrorOverlay` so the CLI's
-// regeneration can push Blume diagnostics into Vite's browser error overlay.
+// regeneration can push BeDocs diagnostics into Vite's browser error overlay.
 // Same-process module singleton (dev and the integration share the instance).
 let overlayServer: OverlayServer | null = null;
 
@@ -24,8 +24,8 @@ const overlayChannel = (): OverlayChannel | undefined =>
   overlayServer?.ws ?? overlayServer?.hot;
 
 /**
- * Surface Blume's own diagnostics (config/frontmatter/content errors) in the
- * Vite/Astro browser error overlay during `blume dev`, so they don't hide in the
+ * Surface BeDocs's own diagnostics (config/frontmatter/content errors) in the
+ * Vite/Astro browser error overlay during `bedocs dev`, so they don't hide in the
  * terminal. A no-op when there are no errors or the dev server isn't up. The
  * overlay clears itself on the next successful HMR update.
  */
@@ -56,7 +56,7 @@ export const showBlumeErrorOverlay = (diagnostics: Diagnostic[]): void => {
   channel.send({
     err: {
       id: errors[0]?.file,
-      message: `Blume found ${errors.length} error(s):\n\n${body}`,
+      message: `BeDocs found ${errors.length} error(s):\n\n${body}`,
       plugin: "blume",
       stack: "",
     },
@@ -81,7 +81,7 @@ export interface BlumeIntegrationOptions {
   /**
    * Homepage `Link` header value for agent discovery (see
    * `ai/link-headers.ts`); the dev-server counterpart of the `_headers` /
-   * Vercel-config emission, so `curl -I` against `blume dev` shows what the
+   * Vercel-config emission, so `curl -I` against `bedocs dev` shows what the
    * deployed site will send.
    */
   homeLinkHeader?: string;
@@ -110,7 +110,7 @@ const isHomeUrl = (rawUrl: string | undefined, base?: string): boolean => {
 /**
  * Dev-server content negotiation: when a client asks for `text/markdown`,
  * transparently rewrite a content-page request to its `.md` variant so the
- * existing raw-Markdown endpoint serves it. Runs only under `blume dev` — in
+ * existing raw-Markdown endpoint serves it. Runs only under `bedocs dev` — in
  * production the content pages are prerendered and served from the platform's
  * static layer, which this middleware never fronts. Vercel server builds get
  * the same negotiation from routing rules spliced into the Build Output config
@@ -162,7 +162,7 @@ export const blumeIntegration = (
       }
     },
     "astro:server:setup": ({ server }) => {
-      // Keep a handle on the dev server so Blume diagnostics can be pushed to
+      // Keep a handle on the dev server so BeDocs diagnostics can be pushed to
       // its browser error overlay (see `showBlumeErrorOverlay`).
       overlayServer = server as unknown as OverlayServer;
       // Prepend so the rewrite happens before Astro's own request handler,

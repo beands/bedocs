@@ -9,7 +9,7 @@ const PAGE_GLOB = ["**/*.astro"];
 /**
  * Astro's routing convention: a file or folder whose name starts with `_` is a
  * private partial — importable (shared layouts, home-page sections), but never
- * built into a route. Blume injects pages itself, so it must reproduce the same
+ * built into a route. BeDocs injects pages itself, so it must reproduce the same
  * exclusion or every `pages/_home/Hero.astro`-style component ships as an HTML
  * page.
  */

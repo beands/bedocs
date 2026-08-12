@@ -48,7 +48,7 @@ export const filesystemSource = (
       cwd: contentRoot,
       // Union the user's `exclude` with the baseline never-content dirs so a
       // broadly-scoped root (`.` or an app dir) can't glob `node_modules`,
-      // `dist`, `.blume`, etc. — even when the user overrode `exclude`.
+      // `dist`, `.bedocs`, etc. — even when the user overrode `exclude`.
       ignore: [...options.exclude, ...baselineScanIgnore()],
       onlyFiles: true,
     });
@@ -83,13 +83,13 @@ export const filesystemSource = (
         file: contentRoot,
         message: `Content root not found: ${options.root}`,
         severity: "error",
-        suggestion: `Create a "${options.root}" folder with at least one .md or .mdx file, or set content.root in blume.config.ts.`,
+        suggestion: `Create a "${options.root}" folder with at least one .md or .mdx file, or set content.root in bedocs.config.ts.`,
       });
     }
   };
 
   // When `content.root` is the project root (a migrated `.`-rooted project),
-  // the recursive dev watcher would otherwise see Blume's own `.blume/` output
+  // the recursive dev watcher would otherwise see BeDocs's own `.bedocs/` output
   // and loop; skip it, VCS/dependency trees, and every excluded dir so the
   // watcher stays in sync with what `load()` globs. See {@link ignoringWatchListener}.
   const watchIgnoreDirs = new Set([

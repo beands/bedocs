@@ -10,7 +10,7 @@ import type { HydrationMode } from "./schema.ts";
  *
  * Astro can only hydrate a component it imports *statically by path*, so to honor
  * hydration on overrides (the `islands` group and `client:*` layout/mdx
- * descriptors) Blume needs each override's source path and client mode at
+ * descriptors) BeDocs needs each override's source path and client mode at
  * generate time — before Vite compiles anything. We read that here by parsing the
  * file with the TypeScript compiler API (never executing it, so `.astro`/React
  * imports don't need a Node loader).

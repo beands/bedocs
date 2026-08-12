@@ -2,19 +2,17 @@ import { existsSync } from "node:fs";
 
 import { isAbsolute, join, resolve } from "pathe";
 
+import { productMeta } from "./product-meta.ts";
 import type { ResolvedConfig } from "./schema.ts";
 import type { ProjectContext } from "./types.ts";
 
-const CONFIG_FILENAMES = [
-  "blume.config.ts",
-  "blume.config.mjs",
-  "blume.config.js",
-];
+const CONFIG_FILENAMES = productMeta.configFiles;
+const LEGACY_CONFIG_FILENAMES = productMeta.legacyConfigFiles;
 
 const THEME_FILENAMES = ["theme.css"];
 const COMPONENTS_FILENAMES = ["components.tsx", "components.ts"];
 
-const firstExisting = (root: string, names: string[]): string | null => {
+const firstExisting = (root: string, names: readonly string[]): string | null => {
   for (const name of names) {
     const candidate = join(root, name);
     if (existsSync(candidate)) {
@@ -24,26 +22,42 @@ const firstExisting = (root: string, names: string[]): string | null => {
   return null;
 };
 
-/** Locate the Blume config file for a project root, if any. */
-export const findConfigFile = (root: string): string | null =>
-  firstExisting(root, CONFIG_FILENAMES);
+/**
+ * Locate the BeDocs config file for a project root, if any.
+ * Falls back to legacy BeDocs config filenames with a deprecation warning.
+ */
+export const findConfigFile = (root: string): string | null => {
+  const primary = firstExisting(root, CONFIG_FILENAMES);
+  if (primary) {
+    return primary;
+  }
+  const legacy = firstExisting(root, LEGACY_CONFIG_FILENAMES);
+  if (legacy) {
+    console.warn(
+      `⚠️  Найден устаревший конфиг файл BeDocs (legacy): ${legacy}\n` +
+        `   Рекомендуется переместить его в bedocs.config.ts.\n` +
+        `   Запустите "bedocs migrate blume" для автоматической миграции.\n`
+    );
+  }
+  return legacy;
+};
 
 /**
  * Resolve the generated runtime directory for a project. Defaults to
- * `<root>/.blume`; an override (e.g. `.blume-verify` for an isolated build that
- * runs alongside a live `blume dev`) may be relative to the root or absolute.
+ * `<root>/.bedocs`; an override (e.g. `.bedocs-verify` for an isolated build that
+ * runs alongside a live `bedocs dev`) may be relative to the root or absolute.
  */
 export const resolveRuntimeDir = (
   root: string,
-  runtimeDir = ".blume"
+  runtimeDir: string = productMeta.generatedDir
 ): string =>
   isAbsolute(runtimeDir) ? runtimeDir : join(resolve(root), runtimeDir);
 
 /**
- * Resolve every path Blume needs from a project root and its resolved config.
+ * Resolve every path BeDocs needs from a project root and its resolved config.
  * Paths are absolute and normalized. `options.runtimeDir` relocates the whole
  * generated runtime (and its build output) so a verify build/check can run
- * without touching a live dev server's `.blume/` or the real `dist/`.
+ * without touching a live dev server's `.bedocs/` or the real `dist/`.
  */
 export const resolveProjectContext = (
   root: string,

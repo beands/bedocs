@@ -1,5 +1,5 @@
 /**
- * The light/dark Shiki themes Blume highlights code with. Every Shiki surface —
+ * The light/dark Shiki themes BeDocs highlights code with. Every Shiki surface —
  * fenced code (the generated Astro `shikiConfig.themes`), inline `` `code`{:lang} ``,
  * out-of-pipeline `highlightCode`, and `<Diff>` — resolves to the same pair so a
  * project's `markdown.codeBlocks.theme` shifts them all in lockstep. This is the

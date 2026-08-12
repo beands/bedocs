@@ -25,14 +25,14 @@ export const syncCommand = defineCommand({
     strict: { description: "Fail on diagnostics.", type: "boolean" },
   },
   meta: {
-    description: "Re-fetch remote content sources and regenerate the runtime.",
+    description: "Обновить удалённые источники контента и регенерировать runtime.",
     name: "sync",
   },
   async run({ args }) {
     const root = process.cwd();
 
     // `--force` drops the snapshots so a stale or corrupt cache can't be served;
-    // scoped to `.blume/cache`, so a running dev server's runtime is untouched.
+    // scoped to `.bedocs/cache`, so a running dev server's runtime is untouched.
     if (args.force) {
       const { config } = await loadConfig(root);
       const context = resolveProjectContext(root, config);

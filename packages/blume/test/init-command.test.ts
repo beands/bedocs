@@ -14,7 +14,7 @@ afterAll(async () => {
   );
 });
 
-describe("blume init", () => {
+describe("bedocs init", () => {
   it("ignores installed dependencies in a new project", async () => {
     const root = await mkdtemp(join(tmpdir(), "blume-init-command-"));
     dirs.push(root);

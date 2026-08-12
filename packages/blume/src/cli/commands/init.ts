@@ -25,8 +25,8 @@ import { logger } from "../log.ts";
 
 /**
  * Eject the freshly scaffolded project, or print the install-then-eject path.
- * Eject jiti-loads the scaffolded blume.config.ts, whose `import { defineConfig }
- * from "blume"` only resolves once dependencies are installed (or blume is
+ * Eject jiti-loads the scaffolded bedocs.config.ts, whose `import { defineConfig }
+ * from "@beands/bedocs"` only resolves once dependencies are installed (or bedocs is
  * hoisted from an ancestor node_modules, as in a monorepo) — so on a fresh
  * scaffold the fallback below is the common path.
  */
@@ -38,20 +38,20 @@ const ejectScaffold = async (
   const cd = answers.directory === "." ? [] : [`cd ${answers.directory}`];
   try {
     await eject(root);
-    // The scaffolded scripts point at the Blume CLI; the ejected app runs
-    // Astro directly (mirroring the standalone `blume eject` command).
+    // The scaffolded scripts point at the BeDocs CLI; the ejected app runs
+    // Astro directly (mirroring the standalone `bedocs eject` command).
     await updatePackageScripts(root);
     logger.success("Ejected to a standalone Astro project.");
     const steps = [...cd, commands.install, commands.dev];
     logger.box(`Next steps:\n\n  ${steps.join("\n  ")}\n`);
   } catch (error) {
     logger.warn(
-      `Scaffolded, but eject needs the project's dependencies installed to load blume.config.ts: ${(error as Error).message}`
+      `Scaffolded, but eject needs the project's dependencies installed to load bedocs.config.ts: ${(error as Error).message}`
     );
     const steps = [
       ...cd,
       commands.install,
-      `${commands.exec} blume eject --yes`,
+      `${commands.exec} bedocs eject --yes`,
     ];
     logger.box(`Next steps:\n\n  ${steps.join("\n  ")}\n`);
   }
@@ -78,7 +78,7 @@ export const initCommand = defineCommand({
       type: "string",
     },
     template: {
-      description: "Starter template: docs | api | sdk | changelog.",
+      description: "Starter template: docs | api | sdk | changelog | synthix | taskcraft | beandsbooker | universal.",
       type: "string",
     },
     yes: {
@@ -87,7 +87,7 @@ export const initCommand = defineCommand({
     },
   },
   meta: {
-    description: "Scaffold a minimal Blume project.",
+    description: "Создать новый проект BeDocs.",
     name: "init",
   },
   async run({ args }) {
@@ -116,7 +116,7 @@ export const initCommand = defineCommand({
 
     let answers: InitAnswers;
     if (interactive) {
-      clack.intro("blume init");
+      clack.intro("bedocs init");
       const collected = await collectAnswers(
         clack,
         {
@@ -157,13 +157,13 @@ export const initCommand = defineCommand({
     const sink = interactive ? clack.log : logger;
     const { createdPackage } = await applyPlan(buildPlan(root, answers), sink);
 
-    // Keep installed dependencies, Blume's generated runtime (`.blume/`), and
+    // Keep installed dependencies, BeDocs's generated runtime (`.bedocs/`), and
     // build output (`dist/`) out of version control. Idempotent: creates
     // `.gitignore` when absent and skips entries already present
     // (trailing-slash agnostic).
     const ignored = await ensureGitignore(root, [
       "node_modules/",
-      ".blume/",
+      ".bedocs/",
       "dist/",
     ]);
     if (ignored.length > 0) {

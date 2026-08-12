@@ -12,10 +12,10 @@ import { trimChar, trimEnd } from "../core/trim.ts";
 
 export type ReferenceKind = "openapi" | "asyncapi";
 
-/** Who renders a reference: Blume's own UI, or the embedded Scalar SPA. */
+/** Who renders a reference: BeDocs's own UI, or the embedded Scalar SPA. */
 export type ReferenceRenderer = "blume" | "scalar";
 
-/** Per-block display options for the Blume renderer. */
+/** Per-block display options for the BeDocs renderer. */
 export interface ReferenceDisplay {
   /** Code-sample languages shown per operation. */
   codeSamples: string[];
@@ -50,10 +50,10 @@ export interface ReferenceSource {
   theme?: string;
   /**
    * Arbitrary Scalar config forwarded to `<ScalarComponent>` (Scalar renderer
-   * only). Takes precedence over Blume's derived spec/theme config.
+   * only). Takes precedence over BeDocs's derived spec/theme config.
    */
   scalar?: Record<string, unknown>;
-  /** Display options carried through to the Blume renderer. */
+  /** Display options carried through to the BeDocs renderer. */
   display: ReferenceDisplay;
   /**
    * Warnings recorded while deduping — another source's route collided with

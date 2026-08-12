@@ -2,28 +2,28 @@ import { colors } from "consola/utils";
 
 import { getBlumeVersion } from "../core/version.ts";
 
-const ISSUES_URL = "https://github.com/haydenbleasel/blume/issues";
+const ISSUES_URL = "https://github.com/beandsmedia/bedocs/issues";
 
-// Absolute paths into the hidden generated runtime — POSIX (`…/.blume/…`) or
-// Windows drive-letter (`C:\…\.blume\…`) — including any trailing `:line:col`,
+// Absolute paths into the hidden generated runtime — POSIX (`…/.bedocs/…`) or
+// Windows drive-letter (`C:\…\.bedocs\…`) — including any trailing `:line:col`,
 // stopping at whitespace or a closing paren.
-const BLUME_FRAME =
-  /(?<abs>(?:\/[^\s()]*\/|[A-Za-z]:\\[^\s()]*\\)\.blume[/\\][^\s()]*)/gu;
+const BEDOCS_FRAME =
+  /(?<abs>(?:\/[^\s()]*\/|[A-Za-z]:\\[^\s()]*\\)\.bedocs[/\\][^\s()]*)/gu;
 
-// The separator immediately before `.blume/` (or `.blume\`) in a matched path.
-const BLUME_MARKER = /[/\\]\.blume[/\\]/u;
+// The separator immediately before `.bedocs/` (or `.bedocs\`) in a matched path.
+const BEDOCS_MARKER = /[/\\]\.bedocs[/\\]/u;
 
 /**
- * Rewrite `.blume/` frames in a stack so the generated runtime reads clearly:
- * the machine-absolute prefix is dropped to a project-relative `.blume/…` path
+ * Rewrite `.bedocs/` frames in a stack so the generated runtime reads clearly:
+ * the machine-absolute prefix is dropped to a project-relative `.bedocs/…` path
  * and tagged `(generated)`, keeping the reader oriented instead of staring at a
  * long path into a hidden directory. Frames in the user's own source (custom
  * pages keep their real location; wrappers import user files by their real path)
  * are untouched, so the actionable frame stays intact.
  */
 export const remapBlumeStack = (stack: string): string =>
-  stack.replaceAll(BLUME_FRAME, (match) => {
-    const marker = match.search(BLUME_MARKER);
+  stack.replaceAll(BEDOCS_FRAME, (match) => {
+    const marker = match.search(BEDOCS_MARKER);
     return `${match.slice(marker + 1)} (generated)`;
   });
 
@@ -41,7 +41,7 @@ export const reportInternalError = (error: unknown): void => {
   ];
 
   // A few frames are enough to locate the fault without burying the report;
-  // `.blume/` frames are relativized so the hidden runtime reads clearly.
+  // `.bedocs/` frames are relativized so the hidden runtime reads clearly.
   const stack = remapBlumeStack(err.stack ?? "")
     .split("\n")
     .slice(1, 5)
@@ -53,10 +53,10 @@ export const reportInternalError = (error: unknown): void => {
 
   lines.push(
     "",
-    "This is likely a bug in Blume. Please report it with the details below:",
+    "This is likely a bug in BeDocs. Please report it with the details below:",
     colors.dim(
       [
-        `  Blume:    ${getBlumeVersion()}`,
+        `  BeDocs:   ${getBlumeVersion()}`,
         `  Node:     ${process.version}`,
         `  Platform: ${process.platform} ${process.arch}`,
       ].join("\n")

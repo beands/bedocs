@@ -10,7 +10,7 @@ const toKebab = (tag: string): string =>
 /**
  * Warn when an `.mdx` page uses a `<Component>` tag that resolves to nothing —
  * a built-in, an island, or a `components.ts` override — so a typo surfaces as a
- * friendly diagnostic (with a `blume add` hint where one exists) instead of a raw
+ * friendly diagnostic (with a `bedocs add` hint where one exists) instead of a raw
  * MDX "X is not defined" build error. `extraTags` are the project's own known
  * components (islands + overrides); `registryNames` gates the install hint.
  */
@@ -29,7 +29,7 @@ export const validateUsedComponents = (
       seen.add(tag);
       const name = toKebab(tag);
       const suggestion = registryNames.has(name)
-        ? `Run \`blume add ${name}\` to install it, or register <${tag}> in components.ts (mdx).`
+        ? `Run \`bedocs add ${name}\` to install it, or register <${tag}> in components.ts (mdx).`
         : `Register <${tag}> in components.ts (mdx), or add an islands/${tag}.tsx component.`;
       diagnostics.push({
         code: "BLUME_UNKNOWN_COMPONENT",

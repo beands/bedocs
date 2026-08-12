@@ -117,7 +117,7 @@ export const translateHeaderLine = (
   localeCount: number,
   agent: AgentKind
 ): string =>
-  `${colors.bold("blume translate")}  ${itemCount} item(s) · ${localeCount} locale(s) · ${AGENTS[agent].name}`;
+  `${colors.bold("bedocs translate")}  ${itemCount} item(s) · ${localeCount} locale(s) · ${AGENTS[agent].name}`;
 
 /**
  * `Translated 11 files into 2 locales · 1 failed · 2 adopted · 8 already up to
@@ -200,7 +200,7 @@ export const hasDrift = (workList: TranslateWorkList): boolean =>
 
 /**
  * The machine-readable `--check` report. The `diagnostics` + `summary` shape
- * matches `blume validate/audit/eval --json` exactly, with the drift report
+ * matches `bedocs validate/audit/eval --json` exactly, with the drift report
  * under `translate`.
  */
 export const checkReportJson = (workList: TranslateWorkList): string => {

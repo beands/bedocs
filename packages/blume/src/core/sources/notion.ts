@@ -77,7 +77,7 @@ export interface NotionClientLike {
   };
 }
 
-/** Notion property names mapped onto Blume meta. */
+/** Notion property names mapped onto BeDocs meta. */
 export interface NotionPropertyMap {
   /** Title property name; defaults to the database's `title`-typed property. */
   title?: string;
@@ -245,7 +245,7 @@ const renderLeaf = (block: NotionBlock): string | null => {
 /**
  * Notion content source. Maps a database to a collection: each page becomes an
  * entry, its properties become frontmatter, and its block tree is converted to
- * MDX with Blume components. Images are materialized so signed URLs don't rot.
+ * MDX with BeDocs components. Images are materialized so signed URLs don't rot.
  */
 export const notionSource = (
   options: NotionSourceOptions,
@@ -253,10 +253,10 @@ export const notionSource = (
 ): ContentSource => {
   const props = options.properties ?? {};
   const cache = snapshotCache(
-    ctx?.cacheDir ?? join(".blume", "cache", options.name)
+    ctx?.cacheDir ?? join(".bedocs", "cache", options.name)
   );
   const assetsDir =
-    ctx?.assetsDir ?? join(".blume", "public", "blume-assets", options.name);
+    ctx?.assetsDir ?? join(".bedocs", "public", "blume-assets", options.name);
   const assetsBaseUrl = ctx?.assetsBaseUrl ?? `/blume-assets/${options.name}`;
   let snapshot = new Map<string, SourceEntry>();
 

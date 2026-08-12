@@ -27,7 +27,7 @@ const groupLabel = (segment: string): string | null =>
  * Slugify a content/route slug (Sanity, Notion, frontmatter `slug`). Heading
  * anchor ids are *not* slugged here — they use a `github-slugger` in
  * {@link extractHeadings}, matching the renderer (see `markdown/heading-anchors`)
- * so `blume validate` checks anchors against the exact rendered heading ids.
+ * so `bedocs validate` checks anchors against the exact rendered heading ids.
  */
 export const slugify = (text: string): string =>
   text
@@ -240,7 +240,7 @@ const finishPromptTag = (
  * `github-slugger` — the exact slugger the renderer uses
  * (`markdown/heading-anchors`) — advanced over every heading in document
  * order. Matching it (rather than a hand-rolled slugify) keeps the manifest's
- * anchor ids identical to the rendered ones, so `blume validate` stops
+ * anchor ids identical to the rendered ones, so `bedocs validate` stops
  * false-flagging links like `#the-read--write-fallback` (a hand slugify
  * collapses `--`; github-slugger keeps it) and resolves repeated headings the
  * same way (`setup`, `setup-1`).

@@ -40,7 +40,7 @@ export const doctorCommand = defineCommand({
     },
   },
   meta: {
-    description: "Diagnose common configuration and content problems.",
+    description: "Диагностика конфигурации и типичных проблем контента.",
     name: "doctor",
   },
   async run({ args }) {

@@ -2,14 +2,14 @@
  * Code-fence meta. A Shiki transformer reads the tokens after the language and
  * promotes them to attributes on the rendered `<pre>`:
  *
- * - a title — the first bare token (```ts blume.config.ts) or `title="..."` —
+ * - a title — the first bare token (```ts bedocs.config.ts) or `title="..."` —
  *   becomes `data-title`; the theme's code header shows it, falling back to the
  *   language label.
  * - the `lineNumbers` keyword (```ts file.ts lineNumbers) becomes
  *   `data-line-numbers`; the theme renders a counter-driven line-number gutter.
  */
 
-/** The slice of Shiki's transformer `this` context Blume reads. */
+/** The slice of Shiki's transformer `this` context BeDocs reads. */
 interface CodeMetaContext {
   options: { meta?: { __raw?: string } };
 }
@@ -37,7 +37,7 @@ const QUOTED_ATTR = /[\w-]+=(?:"[^"]*"|'[^']*')/gu;
 const withoutQuotedAttrs = (raw: string): string =>
   raw.replace(QUOTED_ATTR, " ");
 
-// The first bare token is the title (```ts blume.config.ts): a non-empty token
+// The first bare token is the title (```ts bedocs.config.ts): a non-empty token
 // that isn't a Shiki line range (`{1,3-5}`), a `key=value` attr, or a reserved
 // `lineNumbers`/`twoslash` keyword.
 const isTitleToken = (token: string): boolean => {

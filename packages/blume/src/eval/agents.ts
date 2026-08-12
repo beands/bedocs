@@ -130,9 +130,9 @@ export interface McpLaunch {
 
 /**
  * Write the MCP config a reader run points its agent CLI at. The bridge is
- * this same CLI relaunched (`blume mcp-stdio`), which resolves correctly from
+ * this same CLI relaunched (`bedocs mcp-stdio`), which resolves correctly from
  * both a source checkout (bun + src/cli/index.ts) and an installed package
- * (node + bin/blume.mjs).
+ * (node + bin/bedocs.mjs).
  */
 export const writeMcpConfig = async (
   dir: string,

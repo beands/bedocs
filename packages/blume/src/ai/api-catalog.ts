@@ -6,7 +6,7 @@ import { resolveReferences } from "../openapi/references.ts";
 /**
  * RFC 9727 API catalog: a linkset (RFC 9264) at `/.well-known/api-catalog`
  * enumerating the APIs a publisher offers, so agents can discover them from
- * the domain alone. Blume already knows the site's APIs — the configured
+ * the domain alone. BeDocs already knows the site's APIs — the configured
  * OpenAPI/AsyncAPI references and the hosted MCP server — so the catalog is
  * generated, never hand-written: one entry per API, anchored at its docs
  * route (the RFC's own examples anchor on developer-portal pages), with
@@ -17,7 +17,7 @@ import { resolveReferences } from "../openapi/references.ts";
 export const API_CATALOG_PATH = "/.well-known/api-catalog";
 export const API_CATALOG_TYPE = "application/linkset+json";
 
-/** An RFC 9264 linkset entry, restricted to the relations Blume emits. */
+/** An RFC 9264 linkset entry, restricted to the relations BeDocs emits. */
 interface LinksetEntry {
   anchor: string;
   "service-desc"?: { href: string; type?: string }[];
@@ -37,7 +37,7 @@ const linksetEntries = (config: ResolvedConfig): LinksetEntry[] => {
 
   const entries: LinksetEntry[] = [];
   for (const reference of resolveReferences(config)) {
-    // Blume-rendered pages mount under `basePath`; Scalar pages stay at the
+    // BeDocs-rendered pages mount under `basePath`; Scalar pages stay at the
     // raw route (see `referenceRoutes`).
     const docRoute =
       reference.renderer === "blume"

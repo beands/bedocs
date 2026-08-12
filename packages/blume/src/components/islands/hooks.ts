@@ -5,7 +5,7 @@ import type { SearchFn, SearchResult } from "../layout/search/types.ts";
 import { joinBase, stripBase } from "./base-path.ts";
 
 /**
- * React hooks for Blume islands.
+ * React hooks for BeDocs islands.
  *
  * Islands hydrate independently (there's no shared React root spanning them), so
  * project data can't come through context. Instead the layout serializes a small

@@ -89,7 +89,7 @@ const WRANGLER_CONFIG_FILES = [
 ];
 
 const resolveCloudflareAdapterArgs = (context: ProjectContext): string => {
-  // Every Blume HTML route prerenders (the only server routes are API
+  // Every BeDocs HTML route prerenders (the only server routes are API
   // endpoints), so images are optimized at build time with sharp. The
   // adapter's default (`cloudflare-binding`) would instead declare a runtime
   // `IMAGES` binding in the generated wrangler config that nothing uses.
@@ -102,7 +102,7 @@ const resolveCloudflareAdapterArgs = (context: ProjectContext): string => {
   ).find((file) => existsSync(file));
   if (wranglerPath) {
     let configPath = relative(context.outDir, wranglerPath);
-    // The wrangler config always lives at the project root, above the `.blume`
+    // The wrangler config always lives at the project root, above the `.bedocs`
     // runtime, so `relative` yields a `../…` path; normalize the theoretical
     // sibling case to an explicit `./` so it reads as a relative import.
     if (!configPath.startsWith(".") && !configPath.startsWith("/")) {
@@ -117,7 +117,7 @@ const resolveCloudflareAdapterArgs = (context: ProjectContext): string => {
  * Without a configured driver, `@astrojs/cloudflare` force-enables KV-backed
  * sessions and declares a `SESSION` kv_namespaces entry in the generated
  * wrangler config — which `wrangler deploy` then requires a real KV namespace
- * for, even though Blume never reads `Astro.session`. An explicit in-memory
+ * for, even though BeDocs never reads `Astro.session`. An explicit in-memory
  * driver keeps the binding out. Swap for Astro's session opt-out once
  * withastro/astro#16871 ships in the supported range.
  */
@@ -146,7 +146,7 @@ const astroConfigImportLine = (options: {
 
 /**
  * Integration packages the generated runtime imports. Declaring them in
- * `.blume/package.json` lets Astro's framework-package crawl discover and bundle
+ * `.bedocs/package.json` lets Astro's framework-package crawl discover and bundle
  * them — notably the React renderer's server entry, which imports the
  * `astro:react:opts` virtual module and must not be externalized (this applies
  * across the `ssr`, `prerender`, and `client` Vite environments).
@@ -169,7 +169,7 @@ export const runtimeDependencies = (options: {
     deps.push("@astrojs/svelte");
   }
   // The Scalar integration is only declared for a Scalar-rendered reference
-  // (the `renderer: "scalar"` fallback, or AsyncAPI). Blume-rendered OpenAPI
+  // (the `renderer: "scalar"` fallback, or AsyncAPI). BeDocs-rendered OpenAPI
   // parses at generate time and needs no runtime Scalar dependency.
   if (hasScalarReferences(config)) {
     deps.push("@scalar/astro");
@@ -194,15 +194,15 @@ export const runtimeDependencies = (options: {
   return deps;
 };
 
-/** Generate `.blume/astro.config.mjs`. */
+/** Generate `.bedocs/astro.config.mjs`. */
 /**
  * Render project tsconfig path aliases as `vite.resolve.alias` object entries.
  * Longest find first, so a more specific prefix (`@components`) is matched
- * before a broader one (`@`); these follow Blume's `blume:*` aliases, which
+ * before a broader one (`@`); these follow BeDocs's `blume:*` aliases, which
  * never overlap with a project's.
  */
 /**
- * Blume's render-time dependencies, forced external on the build's SSR and
+ * BeDocs's render-time dependencies, forced external on the build's SSR and
  * static-prerender Vite environments.
  *
  * Two reasons a dep lands here:
@@ -212,7 +212,7 @@ export const runtimeDependencies = (options: {
  *     and breaks the binding lookup ("Cannot find native binding") on other
  *     platforms (e.g. the Linux CI runner), so it must resolve from
  *     `node_modules` at runtime instead. The prerender env matches these by
- *     exact specifier, so every entry point Blume imports has to be listed:
+ *     exact specifier, so every entry point BeDocs imports has to be listed:
  *     the bare `takumi-js` (render) plus `takumi-js/helpers` (the `googleFonts`
  *     OG-font loader). The `@takumi-rs/*` packages are listed too so the native
  *     backend is never pulled into a chunk down any transitive path.
@@ -261,14 +261,14 @@ const astroOutDir = (context: ProjectContext): string =>
   context.distDir ?? `${context.root}/dist`;
 
 /**
- * The root a deploy adapter is shown, in place of the `.blume` runtime Astro
+ * The root a deploy adapter is shown, in place of the `.bedocs` runtime Astro
  * actually roots at. Adapters assume `outDir` is `<root>/dist` and resolve their
  * own output (and Vercel's dependency trace) against `root`, so the root implied
- * by Blume's `outDir` is the one that keeps that assumption true. See
+ * by BeDocs's `outDir` is the one that keeps that assumption true. See
  * {@link withAdapterRoot}.
  *
  * For a normal build that is the project root (`<project>/dist` -> `<project>`).
- * For a relocated runtime (`blume build --isolated`) it is the runtime dir
+ * For a relocated runtime (`bedocs build --isolated`) it is the runtime dir
  * itself (`<runtime>/dist` -> `<runtime>`), keeping a verify build's adapter
  * output self-contained instead of overwriting the real `.vercel/output`.
  */
@@ -281,7 +281,7 @@ const adapterRoot = (context: ProjectContext): string =>
  * `/\.astro$/`, so without this Babel re-parses every optimized dep chunk
  * served from `.vite/deps` — a 500KB+ vendor bundle per chunk, re-done on each
  * re-optimization. A blanket `/node_modules/` exclude would instead switch the
- * React Compiler off for Blume's own components in published installs (they
+ * React Compiler off for BeDocs's own components in published installs (they
  * resolve under `node_modules/blume/src`, and exclude beats include in the
  * plugin's filter), so only the pre-bundle cache is excluded.
  */
@@ -291,8 +291,8 @@ const REACT_EXCLUDE = String.raw`exclude: [/\/node_modules\/\.vite\//]`;
  * The `react()` integration call. When `compilerPath` is set (the resolved
  * absolute path to `babel-plugin-react-compiler`), react() carries the compiler
  * as the first babel plugin — an absolute path, because @vitejs/plugin-react
- * resolves babel plugins from the *project* root, not `.blume/`, so a bare
- * specifier wouldn't resolve in a user project. `target: "19"` matches Blume's
+ * resolves babel plugins from the *project* root, not `.bedocs/`, so a bare
+ * specifier wouldn't resolve in a user project. `target: "19"` matches BeDocs's
  * React pin. `null`/`undefined` (compiler off or unresolvable) omits the babel
  * block. Both variants carry the pre-bundle exclude above.
  */
@@ -307,7 +307,7 @@ const reactIntegration = (compilerPath: string | null | undefined): string =>
  * directory containing the runtime dir (a migrated, `content.root: "."`
  * project). There, the glob loader's watcher match (`picomatch.isMatch(entry,
  * pattern)` with array-OR semantics, where any negated pattern matches
- * unrelated files) fires on every `.blume/.astro` write — "No entry type
+ * unrelated files) fires on every `.bedocs/.astro` write — "No entry type
  * found" noise, and a `data-store.json` event can re-ingest the store file as
  * a JSON entry and loop the sync. Everywhere else the watcher MUST see
  * `.astro/data-store.json`: its change events are the only trigger for
@@ -350,7 +350,7 @@ const renderIntegrationBridge = (
   }
   return {
     configSourceMarker: bridge.sourceHash
-      ? `// Blume config source SHA-256: ${bridge.sourceHash}\n`
+      ? `// BeDocs config source SHA-256: ${bridge.sourceHash}\n`
       : "",
     userConfigImports: `import { dirname, resolve } from "node:path";\nimport { fileURLToPath } from "node:url";\nimport { createModuleLoader } from "blume/core/load-module.ts";\n`,
     userConfigSetup: `const loadBlumeConfig = createModuleLoader();\nconst blumeConfig = await loadBlumeConfig(resolve(dirname(fileURLToPath(import.meta.url)), ${JSON.stringify(
@@ -421,7 +421,7 @@ export const astroConfigTemplate = (options: {
   openapiPath: string;
   /**
    * Absolute path to `babel-plugin-react-compiler` when the React Compiler is
-   * enabled (resolved from Blume's package root by the caller); null/absent
+   * enabled (resolved from BeDocs's package root by the caller); null/absent
    * disables the compiler and emits a bare `react()`.
    */
   reactCompilerPath?: string | null;
@@ -477,7 +477,7 @@ export const astroConfigTemplate = (options: {
     return ADAPTER_OPTIONS[deployment.adapter] ?? "";
   })();
   // Vercel resolves its Build Output tree and its `@vercel/nft` dependency
-  // trace against the Astro root, which for Blume is the hidden `.blume`
+  // trace against the Astro root, which for BeDocs is the hidden `.bedocs`
   // runtime — leaving the traced function without its chunks or node_modules.
   // The other adapters emit into `outDir` (cloudflare, node) or are surfaced
   // afterwards (netlify), so none of them read `root` this way.
@@ -499,7 +499,7 @@ export const astroConfigTemplate = (options: {
   const imageOption = renderImageOption(config);
 
   // Astro's native i18n gives locale-aware helpers + `<html lang>` correctness.
-  // Blume owns getStaticPaths and materializes fallback routes in the manifest,
+  // BeDocs owns getStaticPaths and materializes fallback routes in the manifest,
   // so we deliberately omit Astro's `fallback` to keep one source of routing.
   const i18nOption = config.i18n
     ? `\n  i18n: ${JSON.stringify({
@@ -534,7 +534,7 @@ export const astroConfigTemplate = (options: {
   // Self-hosted fonts via Astro's Fonts API, derived from theme.fonts.
   // `fontProviders` is only imported when at least one font is configured.
   // Local variant sources are emitted as absolute paths (the Astro root is
-  // `.blume/`, not the user's project, so root-relative paths would miss).
+  // `.bedocs/`, not the user's project, so root-relative paths would miss).
   const fontEntries = buildFontEntries(config.theme.fonts);
   const fontsOption = fontEntries.length
     ? `\n  fonts: [${fontEntries
@@ -594,7 +594,7 @@ export const astroConfigTemplate = (options: {
   // Twoslash runs first, before the always-on transformers, but only on fences
   // with the `twoslash` meta (explicitTrigger) — so it's opt-in per block with
   // no config flag; the TypeScript compiler only spins up when a block uses it.
-  // Blume's preconfigured transformer compiles with the package's own pinned
+  // BeDocs's preconfigured transformer compiles with the package's own pinned
   // classic TypeScript, so the user's project can be on any version (see
   // markdown/twoslash.ts).
   const twoslashTransformer = "blumeTwoslashTransformer(), ";
@@ -647,7 +647,7 @@ export const astroConfigTemplate = (options: {
     userIntegrationSpread,
   } = renderIntegrationBridge(options.integrationBridge);
 
-  return `// Generated by Blume. Do not edit; this file is recreated on each run.
+  return `// Generated by BeDocs. Do not edit; this file is recreated on each run.
 ${configSourceMarker}${userConfigImports}${defineConfigImport}
 import mdx from "@astrojs/mdx";
 import tailwindcss from "@tailwindcss/vite";
@@ -698,9 +698,9 @@ ${userConfigSetup}export default defineConfig({
     // imports land on CJS/UMD files (mermaid statically imports dayjs as CJS,
     // epub-gen-memory's browser bundle is a browserified UMD) that break when
     // served as raw ESM — mermaid throws on load and the EPUB export throws
-    // \`epub is not a function\`. They resolve through the \`blume\` package
+    // \`epub is not a function\`. They resolve through the \`@beands/bedocs\` package
     // (they aren't direct deps of the generated project), so the nested
-    // \`blume > x\` form is required, and epub-gen-memory must name the
+    // \`@beands/bedocs > x\` form is required, and epub-gen-memory must name the
     // \`/bundle\` subpath that is actually imported: optimizing the package
     // root leaves that entry out. Production (Rollup) already handles the
     // interop, so all of this only affects dev.
@@ -708,7 +708,7 @@ ${userConfigSetup}export default defineConfig({
       entries: ${JSON.stringify(optimizeDepsEntries)},
       include: ${JSON.stringify(optimizeDepsInclude)},
     },
-    // Blume's render-time deps are forced external on both build environments so
+    // BeDocs's render-time deps are forced external on both build environments so
     // native bindings resolve at runtime and isolated linkers don't bundle
     // symlinked store copies (which would surface their children as unresolvable
     // imports). See RENDER_EXTERNAL_DEPS / prerenderDepsPlugin.
@@ -775,7 +775,7 @@ export const runtimeDirWithin = (
 const astroGlobBase = (base: string): string =>
   isAbsolute(base) ? pathToFileURL(base).href : base;
 
-/** Generate `.blume/src/content.config.ts`. */
+/** Generate `.bedocs/src/content.config.ts`. */
 export const contentConfigTemplate = (options: {
   context: ProjectContext;
   config: ResolvedConfig;
@@ -805,15 +805,15 @@ export const contentConfigTemplate = (options: {
 
   // Fold the content excludes into the glob as negative patterns so the `docs`
   // collection doesn't ingest ignored trees (`node_modules`, `snippets`, the
-  // staged bodies under `.blume/content`, …) as entries. This matters when
+  // staged bodies under `.bedocs/content`, …) as entries. This matters when
   // the collection base is the project root (a migrated `.`-rooted project).
   const outDirRel = runtimeDirWithin(collectionBase, context.outDir);
   const outDirIgnore = outDirRel ? [`!${outDirRel}/**`] : [];
 
   // With no filesystem source, no route renders through `docs`, so glob nothing.
   // Beyond skipping wasted work, this is the only thing that keeps Astro's
-  // content-layer *watcher* out of `.blume/`: an all-staged project roots the
-  // collection at the project dir (which contains `.blume/.astro/fonts`, rewritten on every
+  // content-layer *watcher* out of `.bedocs/`: an all-staged project roots the
+  // collection at the project dir (which contains `.bedocs/.astro/fonts`, rewritten on every
   // request), and the watcher's match test is `picomatch.isMatch(path, pattern)`
   // — with array-OR semantics, any `!ignored/**` negation *matches* unrelated
   // files, so negative patterns can't exclude a subtree there. An empty pattern
@@ -828,10 +828,10 @@ export const contentConfigTemplate = (options: {
         // Astro's content layer roots at the project dir, so a `.`-wide content
         // root would otherwise re-ingest dependency trees and build output —
         // e.g. a prior `dist/*.mdx` render — and crash the content-module graph.
-        // The runtime dir (`.blume`, or a custom distDir) is excluded precisely
+        // The runtime dir (`.bedocs`, or a custom distDir) is excluded precisely
         // by `outDirIgnore` instead, so it's left out of this baseline.
         ...BLUME_IGNORE_DIRS.flatMap((dir) =>
-          dir === ".blume" ? [] : [`!**/${dir}/**`]
+          dir === ".bedocs" ? [] : [`!**/${dir}/**`]
         ),
         ...outDirIgnore,
       ]
@@ -851,7 +851,7 @@ const staged = defineCollection({
 `
     : "";
 
-  return `// Generated by Blume. Do not edit.
+  return `// Generated by BeDocs. Do not edit.
 import { defineCollection } from "astro:content";
 import { glob } from "astro/loaders";
 
@@ -867,8 +867,8 @@ export const collections = { docs${options.staged ? ", staged" : ""} };
 `;
 };
 
-/** Generate `.blume/src/pages/[...slug].astro`, the docs catch-all route. */
-/** Generate the Ask AI server endpoint (`.blume/src/pages/api/ask.ts`). */
+/** Generate `.bedocs/src/pages/[...slug].astro`, the docs catch-all route. */
+/** Generate the Ask AI server endpoint (`.bedocs/src/pages/api/ask.ts`). */
 export const askEndpointTemplate = (
   backend: AskBackend,
   grounded: boolean
@@ -990,7 +990,7 @@ ${stream}
     return new Response("Failed to generate a response.", { status: 500 });
   }
 };`;
-  return `// Generated by Blume. Do not edit.
+  return `// Generated by BeDocs. Do not edit.
 ${imports.join("\n")}
 
 export const prerender = false;
@@ -1000,7 +1000,7 @@ ${handler}
 };
 
 /**
- * Generate `.blume/src/generated/Ask.astro` — the component behind the
+ * Generate `.bedocs/src/generated/Ask.astro` — the component behind the
  * `blume:ask` alias that the shared header renders in place of a per-page slot.
  *
  * The header can't import the Ask AI island directly: it's a React component, so
@@ -1018,7 +1018,7 @@ ${handler}
 export const askComponentTemplate = (askEnabled: boolean): string =>
   askEnabled
     ? `---
-// Generated by Blume. Do not edit.
+// Generated by BeDocs. Do not edit.
 import AskAI from "blume/components/islands/AskAI.astro";
 import data from "blume:data";
 
@@ -1032,7 +1032,7 @@ const { strings } = Astro.props;
 />
 `
     : `---
-// Generated by Blume. Do not edit.
+// Generated by BeDocs. Do not edit.
 // Ask AI is off (\`ai.ask.enabled\`), so the header's Ask trigger renders nothing.
 // Deliberately imports no React island, keeping the JSX renderer out of projects
 // that don't need it.
@@ -1041,7 +1041,7 @@ const { strings } = Astro.props;
 
 /** Generate the static search index endpoint (`/blume-search.json`). */
 export const searchEndpointTemplate = (): string =>
-  `// Generated by Blume. Do not edit.
+  `// Generated by BeDocs. Do not edit.
 import documents from "../generated/search.json";
 
 export const prerender = true;
@@ -1053,9 +1053,9 @@ export function GET() {
 }
 `;
 
-const SEARCH_CLIENT_HEADER = "// Generated by Blume. Do not edit.\n";
+const SEARCH_CLIENT_HEADER = "// Generated by BeDocs. Do not edit.\n";
 
-/** Import the chosen provider's `createSearch` from the Blume package. */
+/** Import the chosen provider's `createSearch` from the BeDocs package. */
 const searchClientImport = (module: string): string =>
   `import { createSearch as create } from "blume/components/layout/search/${module}.ts";\n`;
 
@@ -1115,7 +1115,7 @@ const hostedSearchOptions = (
 };
 
 /**
- * Generate `.blume/src/generated/search-client.ts` — the provider-specific
+ * Generate `.bedocs/src/generated/search-client.ts` — the provider-specific
  * loader the `<Search>` component lazy-imports via the `blume:search-client`
  * alias. Only the configured provider's module (and therefore its SDK) is
  * referenced, so the build bundles exactly one backend. Public credentials are
@@ -1166,7 +1166,7 @@ export const createSearch = () => create({ url });
  * synced (see the Mixedbread sync step / \`mxbai vs sync\`).
  */
 export const mixedbreadSearchEndpointTemplate = (storeId: string): string =>
-  `// Generated by Blume. Do not edit.
+  `// Generated by BeDocs. Do not edit.
 import type { APIRoute } from "astro";
 import Mixedbread from "@mixedbread/sdk";
 
@@ -1212,7 +1212,7 @@ export const POST: APIRoute = async ({ request }) => {
  * that can't interpret JSX.
  */
 export const rawMarkdownEndpointTemplate = (kind: "md" | "mdx"): string =>
-  `// Generated by Blume. Do not edit.
+  `// Generated by BeDocs. Do not edit.
 import raw from "../generated/raw-markdown.json";
 
 export const prerender = true;
@@ -1248,7 +1248,7 @@ export function GET({ props }: { props: { route: string } }) {
  *     Markdown endpoints (the HTML render uses the `astro:assets`-optimized
  *     copies instead). The mapping comes from `generated/content-assets.json`.
  *   - `<source>/<hash>.<ext>` — remote-source images the scan pipeline
- *     materializes under `.blume/public/blume-assets` (see
+ *     materializes under `.bedocs/public/blume-assets` (see
  *     `core/sources/assets.ts`). That directory is NOT Astro's `publicDir`
  *     (which points at the user project's `public/`), so without this endpoint
  *     those references 404.
@@ -1258,7 +1258,7 @@ export function GET({ props }: { props: { route: string } }) {
 export const contentAssetsEndpointTemplate = (
   stagedAssetsDir: string
 ): string =>
-  `// Generated by Blume. Do not edit.
+  `// Generated by BeDocs. Do not edit.
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
@@ -1344,7 +1344,7 @@ export const mcpPageFile = (route: string): string =>
   `${trimChar(route, "/")}.ts`;
 
 /**
- * Generate the hosted MCP server endpoint (e.g. `.blume/src/pages/mcp.ts`). A
+ * Generate the hosted MCP server endpoint (e.g. `.bedocs/src/pages/mcp.ts`). A
  * thin wrapper around the shipped `createMcpFetchHandler`, served from the
  * generated data snapshot. Runs server-side (no prerender) so agents can query
  * the docs over Streamable HTTP.
@@ -1352,7 +1352,7 @@ export const mcpPageFile = (route: string): string =>
 export const mcpEndpointTemplate = (route: string): string => {
   const clean = trimChar(route, "/");
   const up = "../".repeat(clean.split("/").length);
-  return `// Generated by Blume. Do not edit.
+  return `// Generated by BeDocs. Do not edit.
 import type { APIRoute } from "astro";
 import { createMcpFetchHandler } from "blume/ai/mcp/server.ts";
 import type { McpData } from "blume/ai/mcp/data.ts";
@@ -1368,7 +1368,7 @@ export const ALL: APIRoute = ({ request }) => handler(request);
 
 /** Generate a prerendered endpoint that serves a fixed JSON payload. */
 export const staticJsonEndpointTemplate = (payload: unknown): string =>
-  `// Generated by Blume. Do not edit.
+  `// Generated by BeDocs. Do not edit.
 export const prerender = true;
 
 const payload = ${JSON.stringify(payload, null, 2)};
@@ -1385,7 +1385,7 @@ export function GET() {
  * type is served from the generated `rss.json`, e.g. `/blog/rss.xml`.
  */
 export const rssEndpointTemplate = (): string =>
-  `// Generated by Blume. Do not edit.
+  `// Generated by BeDocs. Do not edit.
 import feeds from "../../generated/rss.json";
 
 export const prerender = true;
@@ -1405,12 +1405,12 @@ export function GET({ props }: { props: { section: string } }) {
 }
 `;
 
-/** Generate the OG image endpoint (`.blume/src/pages/og/[...slug].png.ts`). */
+/** Generate the OG image endpoint (`.bedocs/src/pages/og/[...slug].png.ts`). */
 export const ogEndpointTemplate = (
   customRoutes: OgCustomRoute[] = [],
   og: { families?: OgFontFamilies; fonts?: OgFont[] } = {}
 ): string =>
-  `// Generated by Blume. Do not edit.
+  `// Generated by BeDocs. Do not edit.
 import { renderOgImage } from "blume/og";
 import type { OgFont, OgFontFamilies } from "blume/og";
 import data from "blume:data";
@@ -1480,9 +1480,9 @@ export async function GET({ props }: { props: { title: string } }) {
 `;
 
 /**
- * Generate a Scalar API/AsyncAPI reference page (`.blume/src/pages/<route>.astro`).
+ * Generate a Scalar API/AsyncAPI reference page (`.bedocs/src/pages/<route>.astro`).
  * The reference UI is owned by Scalar (its standalone bundle, loaded from a CDN)
- * but mounted inside Blume's {@link ReferenceLayout} so the page keeps Blume's
+ * but mounted inside BeDocs's {@link ReferenceLayout} so the page keeps BeDocs's
  * navbar on top. `renderMode: "client"` mounts the reference into a container
  * element (rather than emitting a full HTML document), which is what lets it
  * live inside our shell. `dataImport` is the route-depth-aware relative path to
@@ -1496,7 +1496,7 @@ export const scalarReferenceTemplate = (options: {
   title: string;
 }): string =>
   `---
-// Generated by Blume. Do not edit.
+// Generated by BeDocs. Do not edit.
 import { ScalarComponent } from "@scalar/astro";
 import ReferenceLayout from "blume/components/layout/ReferenceLayout.astro";
 import data from ${JSON.stringify(options.dataImport)};
@@ -1513,7 +1513,7 @@ const localeMeta = i18n
   ? i18n.locales.find((l) => l.code === i18n.defaultLocale)
   : null;
 const dir = localeMeta?.dir ?? "ltr";
-const htmlLang = i18n ? i18n.defaultLocale : "en";
+const htmlLang = i18n ? i18n.defaultLocale : "ru";
 ---
 
 <ReferenceLayout
@@ -1555,7 +1555,7 @@ export const catchAllPageTemplate = (options: {
     : "";
 
   return `---
-// Generated by Blume. Do not edit.
+// Generated by BeDocs. Do not edit.
 import { getEntry, render } from "astro:content";
 import type { CollectionKey } from "astro:content";
 import RootLayout from "blume/components/layout/RootLayout.astro";
@@ -1725,7 +1725,7 @@ const navigation = i18n ? (data.navigationByLocale[locale] ?? data.navigation) :
 const ui = i18n ? (data.uiByLocale[locale] ?? data.ui) : data.ui;
 const localeMeta = i18n ? i18n.locales.find((l) => l.code === locale) : null;
 const dir = localeMeta?.dir ?? "ltr";
-const htmlLang = i18n ? locale : "en";
+const htmlLang = i18n ? locale : "ru";
 // A fallback page renders the fallback locale's content, so its text direction
 // follows that language — not the (mirrored) page locale.
 const contentLocale =
@@ -1816,7 +1816,7 @@ const LayoutComponent = resolveSlot(layoutOverrides.Layout, RootLayout);
 };
 
 /**
- * Generate `.blume/src/pages/changelog.astro` — the changelog index. Collects
+ * Generate `.bedocs/src/pages/changelog.astro` — the changelog index. Collects
  * every `type: changelog` entry, sorts newest-first, and renders each through
  * the `Update` timeline layout (date/version rail + entry content). Only written
  * by {@link generateAstroProject} when changelog entries exist.
@@ -1839,7 +1839,7 @@ export const changelogIndexTemplate = (options: {
     : "";
 
   return `---
-// Generated by Blume. Do not edit.
+// Generated by BeDocs. Do not edit.
 import { getCollection, render } from "astro:content";
 import RootLayout from "blume/components/layout/RootLayout.astro";
 import Update from "blume/components/content/Update.astro";
@@ -2082,7 +2082,7 @@ const LayoutComponent = resolveSlot(layoutOverrides.Layout, RootLayout);
 };
 
 /**
- * Generate `.blume/src/pages/404.astro`: the default not-found page. Rendered
+ * Generate `.bedocs/src/pages/404.astro`: the default not-found page. Rendered
  * through `PageLayout` (header + search, no sidebar) so it stays consistent with
  * the rest of the site, with copy pulled from the translatable `notFound` UI
  * strings. Written at Astro's reserved `src/pages/404.astro` path so static
@@ -2091,7 +2091,7 @@ const LayoutComponent = resolveSlot(layoutOverrides.Layout, RootLayout);
  * `/404` route, so projects can fully override it.
  */
 export const notFoundPageTemplate = (): string => `---
-// Generated by Blume. Do not edit. Override by adding \`pages/404.astro\`.
+// Generated by BeDocs. Do not edit. Override by adding \`pages/404.astro\`.
 import PageLayout from "blume/components/layout/PageLayout.astro";
 import { withBase } from "blume/components/islands/base-path.ts";
 import data from "blume:data";
@@ -2108,7 +2108,7 @@ const localeMeta = i18n
   ? i18n.locales.find((l) => l.code === i18n.defaultLocale)
   : null;
 const dir = localeMeta?.dir ?? "ltr";
-const htmlLang = i18n ? i18n.defaultLocale : "en";
+const htmlLang = i18n ? i18n.defaultLocale : "ru";
 ---
 
 <PageLayout
@@ -2166,14 +2166,14 @@ const wrapperPropsType = (name: string): string =>
   : Record<string, unknown>;`;
 
 /**
- * Generate `.blume/src/generated/islands/<Name>.astro` — a wrapper that renders
+ * Generate `.bedocs/src/generated/islands/<Name>.astro` — a wrapper that renders
  * a convention island with its hydration directive applied. Astro client
  * directives must be written statically, so one wrapper is emitted per island;
  * props and the default slot (MDX children) forward through.
  */
 export const islandWrapperTemplate = (spec: IslandSpec): string =>
   `---
-// Generated by Blume. Do not edit.
+// Generated by BeDocs. Do not edit.
 import Island from ${JSON.stringify(spec.file)};
 ${wrapperPropsType("Island")}
 ---
@@ -2181,13 +2181,13 @@ ${wrapperPropsType("Island")}
 `;
 
 /**
- * Generate `.blume/src/generated/islands.ts` — the map of island names to their
+ * Generate `.bedocs/src/generated/islands.ts` — the map of island names to their
  * wrappers, spread into the MDX component scope by the catch-all page. Always
  * written (an empty map when there are no islands) so the import resolves.
  */
 export const islandMapTemplate = (specs: IslandSpec[]): string => {
   if (specs.length === 0) {
-    return `// Generated by Blume. Do not edit.
+    return `// Generated by BeDocs. Do not edit.
 export const islandComponents = {};
 `;
   }
@@ -2199,7 +2199,7 @@ export const islandComponents = {};
   const entries = specs
     .map((spec, index) => `  ${spec.name}: I${index},`)
     .join("\n");
-  return `// Generated by Blume. Do not edit.
+  return `// Generated by BeDocs. Do not edit.
 ${imports}
 export const islandComponents = {
 ${entries}
@@ -2230,13 +2230,13 @@ export const exampleSlug = (path: string): string =>
   );
 
 /**
- * Generate `.blume/src/generated/examples/<slug>.astro` — a wrapper that renders
+ * Generate `.bedocs/src/generated/examples/<slug>.astro` — a wrapper that renders
  * one example live, with its hydration directive applied (none for `.astro`).
  * Mirrors {@link islandWrapperTemplate}; `<Component>` resolves these by path.
  */
 export const exampleWrapperTemplate = (spec: ExampleSpec): string =>
   `---
-// Generated by Blume. Do not edit.
+// Generated by BeDocs. Do not edit.
 import Example from ${JSON.stringify(spec.file)};
 ${wrapperPropsType("Example")}
 ---
@@ -2252,7 +2252,7 @@ export const examplesRouteBase = (basePath: string): string =>
   `${basePath}/blume-examples`;
 
 /**
- * Generate `.blume/src/generated/examples.ts` — a map of example path to its live
+ * Generate `.bedocs/src/generated/examples.ts` — a map of example path to its live
  * wrapper component plus raw source and language for the code tab, and the route
  * base preview iframes point at. Reached by the shipped `Component.astro` and the
  * generated preview page via the `blume:examples` alias. Always written (an
@@ -2266,7 +2266,7 @@ export const exampleMapTemplate = (
     examplesRouteBase(basePath)
   )};`;
   if (specs.length === 0) {
-    return `// Generated by Blume. Do not edit.
+    return `// Generated by BeDocs. Do not edit.
 ${base}
 export const examples = {};
 `;
@@ -2285,7 +2285,7 @@ export const examples = {};
         )}, lang: ${JSON.stringify(spec.lang)} },`
     )
     .join("\n");
-  return `// Generated by Blume. Do not edit.
+  return `// Generated by BeDocs. Do not edit.
 ${imports}
 ${base}
 export const examples = {
@@ -2299,7 +2299,7 @@ ${entries}
  * example under `{basePath}/blume-examples/`, rendered as a bare document
  * (no layout) that an iframe in the docs page embeds. The iframe boundary is
  * what isolates examples from the docs CSS: the only stylesheet here is the
- * example entry (`blume:examples-theme` — Tailwind, the Blume tokens, and the
+ * example entry (`blume:examples-theme` — Tailwind, the BeDocs tokens, and the
  * user's configured examples css), so users can preview components styled by
  * their own design system (e.g. shadcn) with no prose styles bleeding in.
  *
@@ -2317,7 +2317,7 @@ ${entries}
  */
 export const examplesPageTemplate = (): string =>
   `---
-// Generated by Blume. Do not edit.
+// Generated by BeDocs. Do not edit.
 import { examples } from "blume:examples";
 import "blume:examples-theme";
 
@@ -2408,7 +2408,7 @@ const Example = entry.Component;
 </html>
 `;
 
-/** Generate `.blume/src/env.d.ts`. */
+/** Generate `.bedocs/src/env.d.ts`. */
 export const envTemplate =
   (): string => `/// <reference path="../.astro/types.d.ts" />
 /// <reference types="astro/client" />
@@ -2443,7 +2443,7 @@ declare module "blume:search-client" {
 }
 `;
 
-/** Generate `.blume/package.json`. */
+/** Generate `.bedocs/package.json`. */
 export const runtimePackageTemplate = (dependencies: string[] = []): string =>
   `${JSON.stringify(
     {
@@ -2459,7 +2459,7 @@ export const runtimePackageTemplate = (dependencies: string[] = []): string =>
     2
   )}\n`;
 
-/** Generate `.blume/tsconfig.json`. */
+/** Generate `.bedocs/tsconfig.json`. */
 export const runtimeTsconfigTemplate = (): string =>
   `${JSON.stringify(
     {

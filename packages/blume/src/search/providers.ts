@@ -21,7 +21,7 @@ export type SearchProviderKind =
 
 export interface SearchProviderMeta {
   kind: SearchProviderKind;
-  /** Extra packages the generated `.blume/package.json` must declare. */
+  /** Extra packages the generated `.bedocs/package.json` must declare. */
   runtimeDeps: string[];
   /** Whether the provider needs `deployment.output: "server"`. */
   requiresServer: boolean;

@@ -18,7 +18,7 @@ export const addCommand = defineCommand({
     },
   },
   meta: {
-    description: "Install a source component or template from the registry.",
+    description: "Установить компонент или шаблон из реестра.",
     name: "add",
   },
   async run({ args }) {
@@ -35,7 +35,7 @@ export const addCommand = defineCommand({
     const item = findItem(args.name);
     if (!item) {
       logger.error(`Unknown registry item: ${args.name}`);
-      logger.info(`Run \`blume add\` to list available items.`);
+      logger.info(`Запустите \`bedocs add\` для списка доступных компонентов.`);
       process.exit(1);
     }
 
@@ -52,7 +52,7 @@ export const addCommand = defineCommand({
           const source = join(packageSrc, entry.file.source);
           const raw = await readFile(source, "utf-8");
           // Built-in components carry relative imports into the package; rewrite
-          // them to `blume/*` so the installed copy resolves them.
+          // them to `@beands/bedocs/*` so the installed copy resolves them.
           const content = entry.file.rewrite
             ? rewriteImports(raw, source, packageSrc)
             : raw;

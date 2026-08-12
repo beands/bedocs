@@ -137,7 +137,7 @@ export const buildAgentReadability = (
   const manifest: Record<string, unknown> = {
     artifacts,
     description: config.description,
-    generator: version ? `blume@${version}` : undefined,
+    generator: version ? `@beands/bedocs@${version}` : undefined,
     name: config.ai.mcp.name ?? config.title,
     site,
   };

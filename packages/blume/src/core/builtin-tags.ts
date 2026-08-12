@@ -1,5 +1,5 @@
 /**
- * The MDX component tags Blume ships (the keys of the catch-all's component map,
+ * The MDX component tags BeDocs ships (the keys of the catch-all's component map,
  * plus composed sub-parts like `Color.Item`/`Tree.File`). Used by the
  * missing-component diagnostic to tell an unknown `<Tag>` from a built-in. Keep
  * in sync with the component map in `astro/templates.ts`.

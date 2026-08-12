@@ -110,7 +110,7 @@ export const auditCommand = defineCommand({
     },
   },
   meta: {
-    description: "Audit the built site for SEO and site-health issues.",
+    description: "Аудит собранного сайта: SEO и проблемы здоровья сайта.",
     name: "audit",
   },
   async run({ args }) {
@@ -144,7 +144,7 @@ export const auditCommand = defineCommand({
     try {
       // `scanProject`, not `prepareProject`: the audit reads the *existing*
       // build and never regenerates the runtime, so it doesn't contend with a
-      // running dev server. Same reasoning as `blume validate`.
+      // running dev server. Same reasoning as `bedocs validate`.
       const project = await scanProject(root, { mode: "build" });
       result = await runAudit({
         external: args.external,
@@ -155,7 +155,7 @@ export const auditCommand = defineCommand({
       });
     } catch (error) {
       if (error instanceof NoBuildError) {
-        logger.error(`${error.message} Run \`blume build\` first.`);
+        logger.error(`${error.message} Run \`bedocs build\` first.`);
         process.exit(1);
       }
       if (error instanceof BlumeError) {

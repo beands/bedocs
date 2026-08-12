@@ -69,7 +69,7 @@ export const collectAnswers = async (
     flags.directory ??
     (await prompter.text({
       defaultValue: ".",
-      message: "Where should we create your project?",
+      message: "Где создать проект?",
       placeholder: "./my-docs",
     }));
   if (cancelled(directory)) {
@@ -79,9 +79,9 @@ export const collectAnswers = async (
   const root = resolve(defaults.cwd, directory);
   const title = await prompter.text({
     initialValue: titleize(basename(root)),
-    message: "What's your docs site called?",
+    message: "Как называется ваш сайт документации?",
     validate: (value) =>
-      value?.trim() ? undefined : "Give your docs site a name.",
+      value?.trim() ? undefined : "Укажите название сайта документации.",
   });
   if (cancelled(title)) {
     return null;
@@ -90,15 +90,35 @@ export const collectAnswers = async (
   const template =
     flags.template ??
     (await prompter.select({
-      message: "Which template?",
+      message: "Выберите шаблон:",
       options: [
-        { hint: "Markdown docs site", label: "docs", value: "docs" },
-        { hint: "OpenAPI reference at /api", label: "api", value: "api" },
-        { hint: "SDK docs with an install page", label: "sdk", value: "sdk" },
+        { hint: "Сайт документации на Markdown", label: "docs", value: "docs" },
+        { hint: "Справочник OpenAPI на /api", label: "api", value: "api" },
+        { hint: "Документация SDK со страницей установки", label: "sdk", value: "sdk" },
         {
-          hint: "Docs plus a changelog tab",
+          hint: "Документация плюс вкладка changelog",
           label: "changelog",
           value: "changelog",
+        },
+        {
+          hint: "Synthix — платформа синтеза аудио",
+          label: "synthix",
+          value: "synthix",
+        },
+        {
+          hint: "Taskcraft — управление задачами",
+          label: "taskcraft",
+          value: "taskcraft",
+        },
+        {
+          hint: "BeandsBooker — онлайн-бронирование",
+          label: "beandsbooker",
+          value: "beandsbooker",
+        },
+        {
+          hint: "Универсальный шаблон",
+          label: "universal",
+          value: "universal",
         },
       ],
     }));
@@ -108,18 +128,18 @@ export const collectAnswers = async (
 
   const picked = await prompter.multiselect({
     initialValues: ["filesystem"],
-    message: "Where does your content live?",
+    message: "Где хранится контент?",
     options: [
-      { hint: "Local .mdx files", label: "filesystem", value: "filesystem" },
+      { hint: "Локальные .mdx файлы", label: "filesystem", value: "filesystem" },
       {
-        hint: "Changelog from GitHub Releases",
+        hint: "Changelog из GitHub Releases",
         label: "github-releases",
         value: "github-releases",
       },
-      { hint: "A Notion database", label: "notion", value: "notion" },
-      { hint: "A Sanity dataset", label: "sanity", value: "sanity" },
+      { hint: "База данных Notion", label: "notion", value: "notion" },
+      { hint: "Датасет Sanity", label: "sanity", value: "sanity" },
       {
-        hint: "MDX fetched from a GitHub repo",
+        hint: "MDX из GitHub-репозитория",
         label: "mdx-remote",
         value: "mdx-remote",
       },
@@ -136,7 +156,7 @@ export const collectAnswers = async (
   if (flags.contentDir === undefined && sources.includes("filesystem")) {
     const answer = await prompter.text({
       defaultValue: "docs",
-      message: "Content directory?",
+      message: "Директория с контентом?",
       placeholder: "docs",
       validate: (value) => validateContentDir(root, value || "docs"),
     });

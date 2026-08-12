@@ -4,7 +4,7 @@
  * The obvious spellings — `/^\/+/`, `/\/+$/`, `/^\/+|\/+$/g` — take quadratic
  * time on a run of the trimmed character, because a failed match at one start
  * position tells the engine nothing about the next one. Every caller here trims
- * a value that comes from outside Blume (a configured route, a spec URL, a site
+ * a value that comes from outside BeDocs (a configured route, a spec URL, a site
  * origin), so the slow path is reachable from user input rather than only from
  * our own literals. These loops are linear and allocation-free.
  */

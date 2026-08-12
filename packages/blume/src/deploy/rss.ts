@@ -22,7 +22,7 @@ export interface RssFeed {
   type: string;
   /** Feed URL path, e.g. `/blog/rss.xml`. */
   path: string;
-  /** Channel title, e.g. `Blume — Blog`. */
+  /** Channel title, e.g. `BeDocs — Blog`. */
   title: string;
   /** Absolute site link. */
   link: string;

@@ -13,7 +13,7 @@ type Adapter = NonNullable<ResolvedConfig["deployment"]["adapter"]>;
  * `.gitignore` — the bundle is a build artifact, and the platform's own state
  * lives alongside it (`.vercel/project.json`, `.netlify/state.json`), so the
  * whole directory is ignored. `node` and `cloudflare` emit into `dist/`, which
- * `blume init` already ignores.
+ * `bedocs init` already ignores.
  */
 export const ADAPTER_IGNORE_DIRS: Partial<Record<Adapter, string>> = {
   netlify: ".netlify/",
@@ -22,9 +22,9 @@ export const ADAPTER_IGNORE_DIRS: Partial<Record<Adapter, string>> = {
 
 /**
  * Server adapters whose deploy bundle lands *outside* Astro's `outDir`, at a
- * path relative to the Astro project root. Blume points the Astro root at the
- * hidden `<root>/.blume` runtime, so these adapters write their bundle to
- * `<root>/.blume/<path>` — where the deploy platform never looks. Each value is
+ * path relative to the Astro project root. BeDocs points the Astro root at the
+ * hidden `<root>/.bedocs` runtime, so these adapters write their bundle to
+ * `<root>/.bedocs/<path>` — where the deploy platform never looks. Each value is
  * the sub-path to surface up to the real project root.
  *
  * `netlify` writes a Frameworks API tree at `.netlify/v1` (its `.netlify/build`
@@ -36,7 +36,7 @@ export const ADAPTER_IGNORE_DIRS: Partial<Record<Adapter, string>> = {
  *
  * `vercel` is absent for a different reason: it is shown the real project root
  * up front (see `withAdapterRoot`), because its `@vercel/nft` dependency trace
- * is rooted there too and tracing from `.blume` silently drops the function's
+ * is rooted there too and tracing from `.bedocs` silently drops the function's
  * chunks and `node_modules`. Given the right root it writes its Build Output
  * tree straight to `<root>/.vercel/output`, so there is nothing left to move.
  */
@@ -113,7 +113,7 @@ export type SurfaceResult =
   | { from: string; moved: true; to: string };
 
 /**
- * Move a server adapter's deploy bundle out of the hidden `.blume` runtime and
+ * Move a server adapter's deploy bundle out of the hidden `.bedocs` runtime and
  * up to the project root, where the deploy platform (and `vercel deploy
  * --prebuilt`) expects it. A no-op for static builds, for adapters that emit
  * into `dist/`, and when the expected output is absent.
@@ -139,7 +139,7 @@ export const surfaceAdapterOutput = async (
   await rm(to, { force: true, recursive: true });
   // `verbatimSymlinks` keeps each symlink's target text as written. Without it,
   // `cp` resolves every relative target against the *source*, rewriting it to an
-  // absolute path under `.blume` — which this function then deletes. Adapters
+  // absolute path under `.bedocs` — which this function then deletes. Adapters
   // that trace dependencies into their function bundle link one package to
   // another that way (under an isolated linker — Bun's `isolated` mode, pnpm —
   // that is every external dependency the function imports), so the resolved

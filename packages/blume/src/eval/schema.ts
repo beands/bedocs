@@ -84,7 +84,7 @@ export const loadEvalsFile = async (
   } catch {
     throw new EvalsFileError(
       path,
-      `No evals file found at ${path}. Run \`blume eval init\` to draft one.`
+      `No evals file found at ${path}. Run \`bedocs eval init\` to draft one.`
     );
   }
 

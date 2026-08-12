@@ -109,7 +109,7 @@ const parseFlags = (
   return { agent: args.agent, threshold, timeoutS };
 };
 
-/** `blume eval --fix`: hand the failing report to the interactive agent. */
+/** `bedocs eval --fix`: hand the failing report to the interactive agent. */
 const runFixHandoff = async (
   agent: AgentKind,
   result: EvalResult,
@@ -134,7 +134,7 @@ const runFixHandoff = async (
   }
 };
 
-/** `blume eval init`: draft a starter evals file via the interactive agent. */
+/** `bedocs eval init`: draft a starter evals file via the interactive agent. */
 const runInit = async (agent: AgentKind, file: string): Promise<void> => {
   const path = join(process.cwd(), file);
   if (existsSync(path)) {
@@ -194,7 +194,7 @@ export const evalCommand = defineCommand({
   },
   meta: {
     description:
-      "Test the docs: an agent answers your questions using only the documentation.",
+      "Тестирование документации: агент отвечает на вопросы, используя только документацию.",
     name: "eval",
   },
   async run({ args }) {
@@ -209,7 +209,7 @@ export const evalCommand = defineCommand({
     try {
       // `scanProject`, not `prepareProject`: the eval reads the content tree
       // and never regenerates the runtime, so it doesn't contend with a
-      // running dev server. Same reasoning as `blume audit`.
+      // running dev server. Same reasoning as `bedocs audit`.
       const project = await scanProject(root, { mode: "build" });
       const evalsPath = join(root, args.file);
       const { evals, raw } = await loadEvalsFile(evalsPath);

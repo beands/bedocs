@@ -7,9 +7,9 @@ import { packageRoot } from "./package-root.ts";
 let cached: string | undefined;
 
 /**
- * The installed Blume package version, read lazily from its `package.json`.
+ * The installed BeDocs package version, read lazily from its `package.json`.
  *
- * Computed on demand (not at module load) so importing the `blume` barrel has no
+ * Computed on demand (not at module load) so importing the `@beands/bedocs` barrel has no
  * filesystem side effect, and anchored at the package root so it resolves the
  * same whether running from source or the bundled CLI.
  */

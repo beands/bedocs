@@ -23,7 +23,7 @@ export interface SanityClientLike {
   fetch: <T = unknown>(query: string) => Promise<T>;
 }
 
-/** Field paths mapping a Sanity document onto Blume meta + body. */
+/** Field paths mapping a Sanity document onto BeDocs meta + body. */
 export interface SanityFieldMap {
   /** Frontmatter title; default `title`. */
   title?: string;
@@ -131,7 +131,7 @@ export const sanitySource = (
   // When constructed directly (custom-source SPI) without a context, cache under
   // a name-derived dir relative to the project; the built-in type passes a ctx.
   const cache = snapshotCache(
-    ctx?.cacheDir ?? join(".blume", "cache", options.name)
+    ctx?.cacheDir ?? join(".bedocs", "cache", options.name)
   );
   let snapshot = new Map<string, SourceEntry>();
 

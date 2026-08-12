@@ -104,7 +104,7 @@ import {
   stagedContentDir,
 } from "./templates.ts";
 
-/** Absolute path to the Blume package `src` directory. */
+/** Absolute path to the BeDocs package `src` directory. */
 const BLUME_SRC = join(packageRoot(), "src");
 
 /** Whether a module specifier resolves from a directory via node resolution. */
@@ -118,13 +118,13 @@ const canResolveFrom = (fromDir: string, spec: string): boolean => {
 };
 
 /**
- * Absolute path to `babel-plugin-react-compiler`, resolved from Blume's own
- * package root (Blume ships it). Returns null when React or the compiler is off.
+ * Absolute path to `babel-plugin-react-compiler`, resolved from BeDocs's own
+ * package root (BeDocs ships it). Returns null when React or the compiler is off.
  *
  * The path must be absolute: @vitejs/plugin-react resolves babel plugins from
- * the *project* root, not `.blume/`, so a bare specifier fails in a user project
+ * the *project* root, not `.bedocs/`, so a bare specifier fails in a user project
  * that never installed the plugin directly. Resolving from `packageRoot()` binds
- * to Blume's shipped copy regardless of the user's package manager or hoisting.
+ * to BeDocs's shipped copy regardless of the user's package manager or hoisting.
  */
 export const resolveReactCompiler = (
   config: ResolvedConfig,
@@ -155,7 +155,7 @@ export const reactCompilerWarnings = (
 ): string[] =>
   needsReact && config.react.compiler && !compilerPath
     ? [
-        "React Compiler is enabled but `babel-plugin-react-compiler` could not be resolved; falling back to an uncompiled build. Reinstall Blume, or set `react: { compiler: false }` to silence this.",
+        "React Compiler is enabled but `babel-plugin-react-compiler` could not be resolved; falling back to an uncompiled build. Reinstall BeDocs, or set `react: { compiler: false }` to silence this.",
       ]
     : [];
 
@@ -174,7 +174,7 @@ const resolveAstroPackageJson = (modulesDir: string): string | null => {
  * `node_modules` directory the walk found it in — or null when none resolves.
  *
  * This deliberately does not use `createRequire().resolve()`. pnpm's generated
- * bin shim adds Blume's virtual-store dependencies to `NODE_PATH`, which
+ * bin shim adds BeDocs's virtual-store dependencies to `NODE_PATH`, which
  * CommonJS resolution honors but ESM package resolution ignores. The generated
  * Astro config uses ESM imports, so treating a NODE_PATH-only result as
  * reachable skips the dependency link and makes `import "astro/config"` fail.
@@ -183,7 +183,7 @@ const resolveAstroPackageJson = (modulesDir: string): string | null => {
  *
  * The containing directory matters as much as the package: under an isolated
  * linker the walk can find a store-deduped astro in a directory that holds
- * nothing else of Blume's, so "the right astro resolves" does not imply "the
+ * nothing else of BeDocs's, so "the right astro resolves" does not imply "the
  * integrations resolve" — callers must check where the hit came from.
  */
 const resolvedAstroHit = (
@@ -217,12 +217,12 @@ export const sameRealDir = (a: string, b: string): boolean => {
 };
 
 /**
- * The two places an installer can put Blume's dependencies:
+ * The two places an installer can put BeDocs's dependencies:
  *   - `<blume>/node_modules` — deps nested under the package (workspace source,
  *     or npm nesting them away from a conflicting hoisted copy)
  *   - `dirname(<blume>)`     — deps as siblings in the store (isolated/pnpm)
  *
- * `packageRoot()` resolves to Blume's real on-disk path (Node follows the
+ * `packageRoot()` resolves to BeDocs's real on-disk path (Node follows the
  * install symlink), so its parent is the store's package directory where the
  * isolated linker places the siblings.
  */
@@ -240,22 +240,22 @@ const candidateHolding = (
   null;
 
 /**
- * Locate the directory that holds Blume's installed dependencies (Astro and its
+ * Locate the directory that holds BeDocs's installed dependencies (Astro and its
  * integrations).
  *
  * With a clean hoisted install this is moot — the deps sit in a `node_modules`
- * the generated `.blume/` already walks up into, and {@link ensureDepsLink}
+ * the generated `.bedocs/` already walks up into, and {@link ensureDepsLink}
  * short-circuits before we need it. But under isolated linkers (Bun's
- * `isolated` mode, pnpm) Blume's deps are NOT hoisted into the project; they
- * live beside the Blume package in a virtual store, invisible to the upward
- * walk from `.blume/` — so probe the {@link depsCandidates}.
+ * `isolated` mode, pnpm) BeDocs's deps are NOT hoisted into the project; they
+ * live beside the BeDocs package in a virtual store, invisible to the upward
+ * walk from `.bedocs/` — so probe the {@link depsCandidates}.
  *
  * Astro alone is a bad probe: an npm split install (an `overrides` pin plus an
- * incremental install) hoists `astro` to the project root while Blume's other
+ * incremental install) hoists `astro` to the project root while BeDocs's other
  * deps stay nested, and probing for astro then picks the root directory — one
  * that holds none of them. Prefer a candidate with the full set (astro beside
  * `@astrojs/mdx`, the integration every generated runtime declares), then one
- * with the integrations (astro hoisted away — the rest of Blume's deps sit
+ * with the integrations (astro hoisted away — the rest of BeDocs's deps sit
  * there too), then one with astro alone.
  */
 const holdsAstro = (dir: string): boolean => existsSync(join(dir, "astro"));
@@ -273,7 +273,7 @@ export const blumeDepsDir = (pkgDir: string = packageRoot()): string | null => {
 };
 
 /**
- * Point `link` at Blume's dependency directory via a `node_modules` junction,
+ * Point `link` at BeDocs's dependency directory via a `node_modules` junction,
  * replacing a stale junction we own and leaving a real directory untouched.
  *
  * `lstat`, not `existsSync`, so a broken junction (target since moved) is still
@@ -324,9 +324,9 @@ const readPkgVersion = (pkgJsonPath: string | null): string | null => {
 
 /**
  * Build the diagnostic for a split-layout Astro conflict that a symlink can't
- * repair: a different Astro is hoisted to the project root, shadowing Blume's,
+ * repair: a different Astro is hoisted to the project root, shadowing BeDocs's,
  * and `@astrojs/mdx` binds to the wrong copy. `blumeAstroPkg`/`shadowAstroPkg`
- * are the resolved `astro/package.json` paths for Blume's set and the one the
+ * are the resolved `astro/package.json` paths for BeDocs's set and the one the
  * runtime actually resolves.
  */
 const astroConflictWarning = (
@@ -337,24 +337,24 @@ const astroConflictWarning = (
   const shadow = readPkgVersion(shadowAstroPkg);
   const versions =
     blume && shadow
-      ? `astro@${shadow} shadowing Blume's astro@${blume}`
-      : "a second copy of Astro shadowing Blume's";
-  const pin = blume ?? "<Blume's astro version>";
-  return `Astro version conflict: another dependency hoisted ${versions} to the project root, so @astrojs/mdx binds to the wrong copy and the build fails on a missing export (e.g. "chunkToString"). A single symlink can't reconcile a split install — pin Blume's Astro by adding a package.json "overrides" (npm/bun/pnpm) or "resolutions" (yarn) entry { "astro": "${pin}" }, then reinstall. Run \`npm ls astro\` to find the dependency pulling the older copy.`;
+      ? `astro@${shadow} shadowing BeDocs's astro@${blume}`
+      : "a second copy of Astro shadowing BeDocs's";
+  const pin = blume ?? "<BeDocs's astro version>";
+  return `Astro version conflict: another dependency hoisted ${versions} to the project root, so @astrojs/mdx binds to the wrong copy and the build fails on a missing export (e.g. "chunkToString"). A single symlink can't reconcile a split install — pin BeDocs's Astro by adding a package.json "overrides" (npm/bun/pnpm) or "resolutions" (yarn) entry { "astro": "${pin}" }, then reinstall. Run \`npm ls astro\` to find the dependency pulling the older copy.`;
 };
 
 /**
- * Drop a `.blume/node_modules` junction that resolves a *different* Blume than
+ * Drop a `.bedocs/node_modules` junction that resolves a *different* BeDocs than
  * the one running. A restored build cache (e.g. Vercel's) can resurrect the
- * junction pointing into a superseded store directory — blume@1.1.0's isolated
+ * junction pointing into a superseded store directory — bedocs@1.1.0's isolated
  * deps dir after 1.1.1 was installed. Releases rarely bump Astro, so the stale
  * target still resolves the very same astro and every astro-based probe in
- * {@link ensureDepsLink} passes through the link — while the `blume/*` imports
+ * {@link ensureDepsLink} passes through the link — while the `@beands/bedocs/*` imports
  * in the freshly generated config load the previous release, crashing on any
  * export added since. Staleness is judged by realpath: the link is stale
  * exactly when the directory behind it holds a `blume` that isn't `pkgDir`.
  * A target with no `blume` entry (the workspace layout links
- * `packages/blume/node_modules`, which holds only the deps) resolves Blume
+ * `packages/blume/node_modules`, which holds only the deps) resolves BeDocs
  * through the normal ancestor walk and stays. Real directories stay too,
  * mirroring {@link linkDepsJunction} — we only ever remove a link we own.
  */
@@ -385,33 +385,33 @@ const dropStaleDepsLink = async (
 };
 
 /**
- * Make the generated runtime resolve Astro and its integrations against Blume's
+ * Make the generated runtime resolve Astro and its integrations against BeDocs's
  * own dependency set. Three failure modes this repairs:
  *
- *   - Astro is *unreachable* from `.blume/` (workspaces under isolated linkers,
+ *   - Astro is *unreachable* from `.bedocs/` (workspaces under isolated linkers,
  *     pnpm) — the deps live in a store the upward walk can't see.
  *   - Astro *resolves to the wrong copy* — a hoisted sibling pinned an older
- *     major (e.g. `astro@6` for a type-only import) that shadows Blume's
+ *     major (e.g. `astro@6` for a type-only import) that shadows BeDocs's
  *     `astro@7`, so `@astrojs/mdx@7` binds to it and crashes the build on a
  *     missing export. Resolving merely *an* astro isn't enough; it must be the
- *     same one Blume uses.
+ *     same one BeDocs uses.
  *   - The *integrations* are unreachable while astro is fine — npm's split
  *     install. An `overrides` pin plus an incremental `npm install` hoists
- *     astro to the project root (deleting Blume's nested copy) but leaves
+ *     astro to the project root (deleting BeDocs's nested copy) but leaves
  *     `@astrojs/mdx` and friends nested under `blume/node_modules`, where the
- *     upward walk from `.blume/` can't see them. The same shape arises under
+ *     upward walk from `.bedocs/` can't see them. The same shape arises under
  *     an isolated linker when the workspace itself declares astro at a version
- *     matching Blume's: the store dedupes both to one copy, so the walk finds
+ *     matching BeDocs's: the store dedupes both to one copy, so the walk finds
  *     the "correct" astro through the workspace's own direct-dep symlink — in
- *     a node_modules holding none of Blume's other deps.
+ *     a node_modules holding none of BeDocs's other deps.
  *
- * The repair is the same symlink: Blume's dependency directory linked in as
- * `.blume/node_modules` so the generated config's bare specifiers (`astro`,
+ * The repair is the same symlink: BeDocs's dependency directory linked in as
+ * `.bedocs/node_modules` so the generated config's bare specifiers (`astro`,
  * `@astrojs/mdx`, …) bind to a consistent set. That's safe when the linked
  * directory holds the full set, or when it holds only the integrations but the
- * runtime already resolves Blume's astro — the junction has no `astro` entry,
+ * runtime already resolves BeDocs's astro — the junction has no `astro` entry,
  * so astro lookups fall through to the hoisted copy the integrations bind to
- * anyway. What it can't fix is the inverse split: Blume's astro nested under a
+ * anyway. What it can't fix is the inverse split: BeDocs's astro nested under a
  * *conflicting* hoisted astro with the integrations hoisted away from it. No
  * single directory yields a consistent set there; only a root `overrides`/
  * `resolutions` pin does, so we return a diagnostic naming the conflict rather
@@ -428,21 +428,21 @@ export const ensureDepsLink = async (
   }
   const mdxDir = candidateHolding(pkgDir, "@astrojs", "mdx");
   const blumeAstro = resolveAstroPackageJson(astroDir);
-  // Before probing what `.blume/` resolves, drop a cache-restored junction
-  // that binds it to a superseded Blume — the probes below would otherwise
-  // pass right through it (same astro, older blume) and leave it in place.
+  // Before probing what `.bedocs/` resolves, drop a cache-restored junction
+  // that binds it to a superseded BeDocs — the probes below would otherwise
+  // pass right through it (same astro, older bedocs) and leave it in place.
   await dropStaleDepsLink(join(outDir, "node_modules"), pkgDir);
   const outDirHit = resolvedAstroHit(outDir);
-  // `.blume/` resolves the very same astro Blume's deps provide.
+  // `.bedocs/` resolves the very same astro BeDocs's deps provide.
   const astroCorrect = blumeAstro !== null && outDirHit?.pkg === blumeAstro;
-  // Clean hoisted install: astro is correct, found in Blume's own dependency
+  // Clean hoisted install: astro is correct, found in BeDocs's own dependency
   // directory, and the integrations sit beside it — the same walk resolves
   // them too, so there is nothing to do. Requiring the walk to land in
   // `astroDir` itself (not merely resolve an identical astro) matters under
   // isolated linkers: a workspace that declares astro at a version matching
-  // Blume's gets a store-deduped symlink in its own node_modules, so the walk
+  // BeDocs's gets a store-deduped symlink in its own node_modules, so the walk
   // finds the "correct" astro in a directory holding only the workspace's
-  // direct deps — none of Blume's integrations (issue #103).
+  // direct deps — none of BeDocs's integrations (issue #103).
   const walkLandsInDeps =
     astroCorrect &&
     outDirHit !== null &&
@@ -451,33 +451,33 @@ export const ensureDepsLink = async (
     return null;
   }
   // Linking the integrations' directory yields a consistent set when it also
-  // holds Blume's astro (the unreachable and repairable-conflict cases) or
+  // holds BeDocs's astro (the unreachable and repairable-conflict cases) or
   // when the correct astro is reachable without it (the npm split install).
   // Any existing link here is stale and gets replaced.
   if (mdxDir && (mdxDir === astroDir || astroCorrect)) {
     await linkDepsJunction(join(outDir, "node_modules"), mdxDir);
     return null;
   }
-  // Split layout: Blume's astro is nested (a conflicting astro took the root
+  // Split layout: BeDocs's astro is nested (a conflicting astro took the root
   // spot) but @astrojs/mdx hoisted away from it, binding to the shadow. Only a
   // root pin fixes this — surface it.
   return astroConflictWarning(blumeAstro, outDirHit?.pkg ?? null);
 };
 
 /**
- * Vite plugin that makes Blume's externalized runtime deps (zod, shiki, sharp,
+ * Vite plugin that makes BeDocs's externalized runtime deps (zod, shiki, sharp,
  * `takumi-js`, …) resolvable when Astro executes the static prerender
  * bundle under an isolated linker (Bun's `isolated` mode, pnpm).
  *
  * Astro's static build emits a self-contained SSR bundle to
  * `<outDir>/.prerender/` and `import()`s it in-process to generate the HTML.
- * That bundle externalizes Blume's render-time deps, so Node resolves them at
+ * That bundle externalizes BeDocs's render-time deps, so Node resolves them at
  * prerender time by walking up from `.prerender/chunks/*.mjs`. {@link
- * ensureDepsLink} only repairs resolution rooted at `.blume/`; `.prerender/`
- * lives under `dist/`, a separate tree an isolated linker never hoists Blume's
+ * ensureDepsLink} only repairs resolution rooted at `.bedocs/`; `.prerender/`
+ * lives under `dist/`, a separate tree an isolated linker never hoists BeDocs's
  * deps into — so the import dies with `Cannot find package 'zod'`. We drop the
  * same `node_modules` junction into the prerender root, mirroring
- * `.blume/node_modules`, so every externalized specifier — native bindings
+ * `.bedocs/node_modules`, so every externalized specifier — native bindings
  * included, which can't be bundled — resolves. Astro deletes `.prerender/` once
  * generation finishes (and the junction with it: `fs.rm` unlinks symlinks, it
  * never follows them), so nothing leaks into the published `dist/`.
@@ -553,7 +553,7 @@ const ISLAND_FRAMEWORK_DEPS: Record<string, string> = {
 
 /**
  * Adapter package the project must install itself for each deployment
- * platform whose adapter Blume doesn't ship. Node and Vercel ship with Blume,
+ * platform whose adapter BeDocs doesn't ship. Node and Vercel ship with BeDocs,
  * so they never need this.
  */
 const DEPLOYMENT_ADAPTER_DEPS: Record<string, string> = {
@@ -564,7 +564,7 @@ const DEPLOYMENT_ADAPTER_DEPS: Record<string, string> = {
 /**
  * Warn when a Vue/Svelte island is present but its Astro integration isn't
  * installed — Vite would otherwise fail opaquely on the generated config import.
- * React ships with Blume, so it never needs this.
+ * React ships with BeDocs, so it never needs this.
  */
 const islandFrameworkWarnings = (
   frameworks: Set<string>,
@@ -584,12 +584,12 @@ const islandFrameworkWarnings = (
 
 /**
  * Warn when the resolved server-output adapter is one the project must install
- * itself (Netlify/Cloudflare; Node and Vercel ship with Blume). The generated
+ * itself (Netlify/Cloudflare; Node and Vercel ship with BeDocs). The generated
  * astro.config.mjs imports the adapter package directly — and on those
  * platforms the adapter is even auto-selected from env vars — so warn early
  * rather than let the build die with an opaque ERR_MODULE_NOT_FOUND from the
  * hidden generated config. Availability mirrors the search-provider check: a
- * dep resolves from the project root or from the Blume package itself.
+ * dep resolves from the project root or from the BeDocs package itself.
  */
 const deploymentAdapterWarnings = (
   deployment: ResolvedConfig["deployment"],
@@ -614,12 +614,12 @@ const deploymentAdapterWarnings = (
  * Warn when the configured search provider's SDK is missing. Provider SDKs are
  * optional peers; warn (rather than fail opaquely in Vite) when the package
  * isn't installed. A dep is available if the project installed it (resolves
- * from the root) OR Blume ships it (resolves from the Blume package — the same
- * set the `.blume` deps link exposes to the build). Resolving from the project
+ * from the root) OR BeDocs ships it (resolves from the BeDocs package — the same
+ * set the `.bedocs` deps link exposes to the build). Resolving from the project
  * root alone falsely flagged a shipped SDK like Orama (the default provider)
  * as missing whenever it wasn't hoisted into the project, e.g. under isolated
  * linkers. We resolve from each package's real location rather than through
- * the `.blume` junction, which can't be traversed reliably for store-symlinked
+ * the `.bedocs` junction, which can't be traversed reliably for store-symlinked
  * deps. `pkgDir` is injectable for testing.
  */
 export const searchProviderWarnings = (
@@ -698,7 +698,7 @@ const readOptional = async (path: string | null): Promise<string> => {
 export const detectNeedsReact = async (root: string): Promise<boolean> => {
   const matches = await glob(["**/*.{tsx,jsx}"], {
     cwd: root,
-    ignore: ["**/node_modules/**", "**/.blume/**", "**/dist/**"],
+    ignore: ["**/node_modules/**", "**/.bedocs/**", "**/dist/**"],
     onlyFiles: true,
   });
   return matches.length > 0;
@@ -723,7 +723,7 @@ export const detectUsesMath = async (
 ): Promise<boolean> => {
   const files = await glob(["**/*.{md,mdx}"], {
     cwd: root,
-    ignore: ["**/node_modules/**", "**/.blume/**", "**/dist/**"],
+    ignore: ["**/node_modules/**", "**/.bedocs/**", "**/dist/**"],
     onlyFiles: true,
   });
   const contents = await Promise.all(
@@ -773,7 +773,7 @@ const writeIfChanged = async (
  * search index, RSS feeds, reference pages, the MCP server — so toggling a
  * feature off would otherwise leave a stale file behind, and a leftover
  * server-rendered endpoint breaks the static build. `writeIfChanged` only ever
- * adds or updates, so this closes the loop. Scoped to `.blume/src`, so it never
+ * adds or updates, so this closes the loop. Scoped to `.bedocs/src`, so it never
  * touches Astro's `dist/`, `.astro/` cache, or the symlinked `node_modules`
  * (all of which live outside `src`). `written` holds normalized absolute paths.
  */
@@ -812,8 +812,8 @@ export const collectStaged = (project: BlumeProject): Map<string, string> => {
 };
 
 /**
- * Materialize staged source bodies under `.blume/content` and prune orphans in
- * that tree (separate from `.blume/src`), so a removed remote entry is cleaned up.
+ * Materialize staged source bodies under `.bedocs/content` and prune orphans in
+ * that tree (separate from `.bedocs/src`), so a removed remote entry is cleaned up.
  */
 const writeStagedContent = async (
   out: string,
@@ -920,7 +920,7 @@ const resolveLogo = (project: BlumeProject): BlumeLogo | null => {
 };
 
 /**
- * Favicon filenames Blume auto-detects, in priority order. Mirrors the Next.js
+ * Favicon filenames BeDocs auto-detects, in priority order. Mirrors the Next.js
  * convention: an `icon.*` or `favicon.*` file in `public/` or the project root
  * becomes the site favicon, no config required.
  */
@@ -952,14 +952,14 @@ const faviconType = (name: string): string | undefined => {
 const inlineDataUri = (file: string, type: string): string =>
   `data:${type};base64,${readFileSync(file).toString("base64")}`;
 
-/** The bundled Blume favicon, inlined as a data URI so it needs no public file. */
+/** The bundled BeDocs favicon, inlined as a data URI so it needs no public file. */
 const defaultFavicon = (): BlumeFavicon => ({
   href: inlineDataUri(join(BLUME_SRC, "assets", "icon.png"), "image/png"),
   type: "image/png",
 });
 
 /**
- * Apple touch icon filenames Blume auto-detects, in priority order. Mirrors the
+ * Apple touch icon filenames BeDocs auto-detects, in priority order. Mirrors the
  * Next.js `apple-icon.*` convention (plus the `apple-touch-icon.png` most favicon
  * generators emit): a match in `public/` or the project root becomes the iOS
  * home-screen icon, no config required.
@@ -997,7 +997,7 @@ const resolveIconFile = (
 };
 
 /**
- * Resolve the site favicon by convention, falling back to the bundled Blume mark
+ * Resolve the site favicon by convention, falling back to the bundled BeDocs mark
  * when the project ships no `icon.*`/`favicon.*` file.
  */
 const resolveFavicon = (project: BlumeProject): BlumeFavicon =>
@@ -1108,8 +1108,9 @@ export const buildRuntimeData = (project: BlumeProject): string => {
     repoUrl: config.navigation.repo && repoUrl ? repoUrl : null,
   });
 
-  // Resolved UI dictionaries: one per locale under i18n, English baseline
-  // otherwise. Threaded into chrome so the catch-all can pick the active locale.
+  // Resolved UI dictionaries: one per locale under i18n, Russian baseline
+  // otherwise (BeDocs defaults to Russian). Threaded into chrome so the
+  // catch-all can pick the active locale.
   const uiByLocale = i18n
     ? Object.fromEntries(
         i18n.locales.map(({ code }) => [
@@ -1126,7 +1127,7 @@ export const buildRuntimeData = (project: BlumeProject): string => {
         defaultLocale: i18n.defaultLocale,
         overrides: i18n.ui,
       })
-    : EN_UI;
+    : resolveUIStrings("ru", { defaultLocale: "ru" });
 
   const navigationByLocale = i18n
     ? Object.fromEntries(
@@ -1248,7 +1249,7 @@ export const buildRuntimeData = (project: BlumeProject): string => {
 
 /** The resolved plan for the hosted MCP server within a single generate pass. */
 interface McpPlan {
-  /** Directory holding the injected discovery endpoints (`.blume/src/blume-mcp`). */
+  /** Directory holding the injected discovery endpoints (`.bedocs/src/blume-mcp`). */
   dir: string;
   /** `.well-known` discovery routes to inject as prerendered pages. */
   discoveryPages: { entrypoint: string; pattern: string }[];
@@ -1286,7 +1287,7 @@ const planMcp = (
     return {
       ...base,
       warnings: [
-        `MCP server route "${route}" is already used by a content or custom page; the MCP server was not generated. Set a different "ai.mcp.route" in blume.config.ts.`,
+        `MCP server route "${route}" is already used by a content or custom page; the MCP server was not generated. Set a different "ai.mcp.route" in bedocs.config.ts.`,
       ],
     };
   }
@@ -1480,7 +1481,7 @@ const assertFontFilesExist = (project: BlumeProject): void => {
 };
 
 /**
- * Write (or update) the generated `.blume/` Astro runtime for a project.
+ * Write (or update) the generated `.bedocs/` Astro runtime for a project.
  * Only files whose content changed are rewritten so Vite HMR stays fast.
  */
 export const generateRuntime = async (
@@ -1511,7 +1512,7 @@ export const generateRuntime = async (
   const askEnabled = config.ai.ask?.enabled ?? false;
   const exportPdf = config.export.pdf;
   const exportEpub = config.export.epub;
-  // Staged (non-filesystem) sources materialize into `.blume/content`; keyed by
+  // Staged (non-filesystem) sources materialize into `.bedocs/content`; keyed by
   // entryId so i18n duplicates of one entry write a single file. Collected here
   // so math detection also sees staged bodies (they never live under root).
   const staged = collectStaged(project);
@@ -1563,7 +1564,7 @@ export const generateRuntime = async (
   const needsSvelte = frameworks.has("svelte");
 
   // Absolute path to the React Compiler babel plugin (null when off). Resolved
-  // here, Node-side, so the generated config points babel straight at Blume's
+  // here, Node-side, so the generated config points babel straight at BeDocs's
   // shipped copy — see resolveReactCompiler. Any unresolved-but-requested
   // warning is folded into `warnings` below (declared later).
   const reactCompilerPath = resolveReactCompiler(config, needsReact);
@@ -1788,7 +1789,7 @@ export const generateRuntime = async (
   const rawMarkdown = await buildRawMarkdown(project);
   // The originals behind the rewritten `/blume-assets/content/…` references in
   // the agent-facing Markdown, plus the endpoint that serves them (and the
-  // remote-source assets materialized under `.blume/public/blume-assets`).
+  // remote-source assets materialized under `.bedocs/public/blume-assets`).
   const contentAssets = await collectContentAssets(project);
   await Promise.all([
     write(
@@ -1875,7 +1876,7 @@ export const generateRuntime = async (
     ...overrideTags,
   ]);
   // Missing-dependency preflights: the search provider's SDK, the deployment
-  // adapter's package, and — since React ships with Blume while Vue/Svelte
+  // adapter's package, and — since React ships with BeDocs while Vue/Svelte
   // don't — any island framework's Astro integration. Warn early rather than
   // let Vite fail to resolve them opaquely.
   warnings.push(
@@ -1908,8 +1909,8 @@ export const generateRuntime = async (
   const openApiSource = project.sources.find(isOpenApiSource);
   // These write to distinct trees and never read one another, so they batch.
   // `data.json`/`openapi.json` and the manifest are not "structural" for Astro;
-  // they hot-reload. `writeStagedContent` owns the `.blume/content` tree (its
-  // own pruning), outside `.blume/src`, so a removed remote entry doesn't linger.
+  // they hot-reload. `writeStagedContent` owns the `.bedocs/content` tree (its
+  // own pruning), outside `.bedocs/src`, so a removed remote entry doesn't linger.
   await Promise.all([
     write(join(srcDir, "generated", "data.json"), buildRuntimeData(project)),
     write(
@@ -1923,7 +1924,7 @@ export const generateRuntime = async (
     writeStagedContent(out, staged),
   ]);
 
-  // Remove anything under `.blume/src` this pass didn't write — e.g. an Ask AI
+  // Remove anything under `.bedocs/src` this pass didn't write — e.g. an Ask AI
   // endpoint left behind after the feature was switched off.
   await pruneOrphans(srcDir, written);
 

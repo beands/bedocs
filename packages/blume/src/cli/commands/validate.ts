@@ -37,7 +37,7 @@ export const validateCommand = defineCommand({
     },
   },
   meta: {
-    description: "Validate internal, anchor, asset, and external links.",
+    description: "Проверка внутренних, якорных, ресурсных и внешних ссылок.",
     name: "validate",
   },
   async run({ args }) {

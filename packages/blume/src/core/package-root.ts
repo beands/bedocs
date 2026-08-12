@@ -12,7 +12,7 @@ export const findPackageRoot = (start: string): string => {
   while (!existsSync(join(dir, "package.json"))) {
     const parent = dirname(dir);
     if (parent === dir) {
-      throw new Error("blume: unable to locate the package root");
+      throw new Error("bedocs: unable to locate the package root");
     }
     dir = parent;
   }
@@ -22,7 +22,7 @@ export const findPackageRoot = (start: string): string => {
 let cached: string | undefined;
 
 /**
- * Absolute path to the installed Blume package root (the directory holding its
+ * Absolute path to the installed BeDocs package root (the directory holding its
  * `package.json`), found by walking up from this module.
  *
  * Anchoring here — rather than at a fixed offset from `import.meta` — keeps the

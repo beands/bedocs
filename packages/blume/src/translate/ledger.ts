@@ -10,7 +10,7 @@ import { writeTextAtomic } from "../core/fs-atomic.ts";
  * The committed translation ledger: which source files have been translated
  * into which locales, and at what source content. Named "ledger" to avoid
  * colliding with the route manifest (`core/manifest.ts`). It lives at the
- * project root — never inside `.blume/` (init gitignores that dir wholesale,
+ * project root — never inside `.bedocs/` (init gitignores that dir wholesale,
  * and the whole point is that the ledger is committed alongside the docs).
  */
 export const LEDGER_FILE = "blume.translations.json";

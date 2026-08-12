@@ -164,7 +164,7 @@ const healthyLinks = () => ({
   ),
 });
 
-describe("blume audit", () => {
+describe("bedocs audit", () => {
   it("fails on a broken link and names the source file that owns it", async () => {
     const root = await fixture(site());
     const { exitCode, stderr } = await audit(root, "--verbose");

@@ -176,7 +176,7 @@ export const translateCommand = defineCommand({
   },
   meta: {
     description:
-      "Translate docs into the configured locales with a local agent CLI.",
+      "Перевод документации на настроенные локали с помощью локального агента.",
     name: "translate",
   },
   async run({ args }) {
@@ -185,12 +185,12 @@ export const translateCommand = defineCommand({
 
     try {
       // `scanProject`, not `prepareProject`: translation reads the content
-      // tree and writes source files, never `.blume/`, so it doesn't contend
-      // with a running dev server. Same reasoning as `blume audit`/`eval`.
+      // tree and writes source files, never `.bedocs/`, so it doesn't contend
+      // with a running dev server. Same reasoning as `bedocs audit`/`eval`.
       const project = await scanProject(root, { mode: "build" });
       if (!i18nEnabled(project.config)) {
         logger.error(
-          "i18n is not configured — add `i18n.locales` to blume.config to use `blume translate`."
+          "i18n is not configured — add `i18n.locales` to bedocs.config to use `bedocs translate`."
         );
         process.exit(1);
       }

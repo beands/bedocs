@@ -15,7 +15,7 @@ import type { ContentSource } from "./sources/types.ts";
 import type { StandardSchema } from "./standard-schema.ts";
 
 /**
- * The public, hand-documented authoring type for `blume.config.ts`.
+ * The public, hand-documented authoring type for `bedocs.config.ts`.
  *
  * This interface mirrors the input side of {@link blumeConfigSchema} — the Zod
  * schema is still the single source of validation truth, but the schema's
@@ -179,7 +179,7 @@ export interface SanitySource {
   apiVersion?: string;
   /** Dataset name to query. */
   dataset: string;
-  /** Field paths mapping a document onto Blume meta + body. */
+  /** Field paths mapping a document onto BeDocs meta + body. */
   fields?: {
     /** Field holding the renderable body (Portable Text or Markdown). */
     body?: string;
@@ -211,7 +211,7 @@ export interface NotionSource {
   pollInterval?: number;
   /** Namespaces this source's routes under `/<prefix>/`. */
   prefix?: string;
-  /** Notion property names mapped onto Blume meta. */
+  /** Notion property names mapped onto BeDocs meta. */
   properties?: {
     /** Property holding the page description. */
     description?: string;
@@ -649,7 +649,7 @@ export interface AskConfig {
   enabled?: boolean;
   /**
    * Existing Ask AI endpoint to call instead of generating one. This keeps a
-   * Blume site static while an API backend owns retrieval, model access, rate
+   * BeDocs site static while an API backend owns retrieval, model access, rate
    * limiting, and streaming. Accepts an absolute URL or root-relative path.
    */
   endpoint?: string;
@@ -706,7 +706,7 @@ export interface AiConfig {
    * replacement Markdown — or `null` to leave the JSX verbatim. A same-name
    * entry replaces a built-in serializer.
    *
-   * These live in `blume.config.ts` (which is executed at build time), not in
+   * These live in `bedocs.config.ts` (which is executed at build time), not in
    * `components.tsx` (which is only statically analyzed, never run).
    *
    * ```ts
@@ -800,7 +800,7 @@ export interface LocaleConfigInput {
   /** Human-readable name shown in the switcher. */
   label: string;
   /**
-   * Freeform style guidance for `blume translate`, e.g. "Brazilian
+   * Freeform style guidance for `bedocs translate`, e.g. "Brazilian
    * Portuguese, informal você". Pins register and dialect from the first
    * translation and wins over an existing translation's style on reruns.
    */
@@ -808,12 +808,12 @@ export interface LocaleConfigInput {
 }
 
 /**
- * Internationalization. Opt-in: when omitted, Blume is single-locale. The
+ * Internationalization. Opt-in: when omitted, BeDocs is single-locale. The
  * default locale lives at the content root; other locales are top-level
  * directories named by `code` (the `dir` parser) or filename suffixes (`dot`).
  */
 export interface I18nConfig {
-  /** Locale rendered at the content root. Defaults to `en`. */
+  /** Locale rendered at the content root. Defaults to `ru`. */
   defaultLocale?: string;
   /** Locale rendered for a missing translation; `null` disables fallback. */
   fallbackLocale?: string | null;
@@ -1104,17 +1104,17 @@ export interface ReactConfig {
 // ---------------------------------------------------------------------------
 
 /**
- * OpenAPI reference. By default (`renderer: "blume"`) Blume renders its own UI:
+ * OpenAPI reference. By default (`renderer: "blume"`) BeDocs renders its own UI:
  * one real page per operation, grouped by tag in the sidebar and included in
  * search, llms.txt, and OG. Set `renderer: "scalar"` for the embedded Scalar
  * SPA (a single self-contained route).
  */
 export interface OpenApiConfig {
-  /** Code-sample languages shown per operation (Blume renderer). */
+  /** Code-sample languages shown per operation (BeDocs renderer). */
   codeSamples?: string[];
   /** Turn the reference on. Defaults to `false`. */
   enabled?: boolean;
-  /** Start nested schema rows expanded (Blume renderer). Defaults to `false`. */
+  /** Start nested schema rows expanded (BeDocs renderer). Defaults to `false`. */
   expandSchemas?: boolean;
   /** Who renders the reference. Defaults to `blume`. */
   renderer?: "blume" | "scalar";
@@ -1285,8 +1285,8 @@ export type TocConfig =
 // ---------------------------------------------------------------------------
 
 /**
- * A Blume site's configuration — the object passed to {@link defineConfig} in
- * `blume.config.ts`. Every field is optional; an empty config renders the
+ * A BeDocs site's configuration — the object passed to {@link defineConfig} in
+ * `bedocs.config.ts`. Every field is optional; an empty config renders the
  * Markdown/MDX under `docs/` with sensible defaults.
  */
 export interface BlumeConfig {

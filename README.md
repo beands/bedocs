@@ -1,107 +1,108 @@
-# Blume
+# BeDocs
 
-[![npm downloads](https://img.shields.io/npm/dm/blume.svg)](https://www.npmjs.com/package/blume) [![Socket Badge](https://socket.dev/api/badge/npm/package/blume)](https://socket.dev/npm/package/blume) ![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/haydenbleasel/blume?utm_source=oss&utm_medium=github&utm_campaign=haydenbleasel%2Fblume&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
+**Документация для всего, что вы создаёте.** Быстрая, с поддержкой ИИ, нулевой конфигурации. Бесплатно и с открытым исходным кодом.
 
-**Documentation for everything you build.** Fast, AI-ready, and zero-config. Free and open source, forever.
+BeDocs — русскоязычный форк [Blume](https://github.com/haydenbleasel/blume) 1.4.1, локализованный и адаптированный для русскоязычных разработчиков.
 
-Drop Markdown or MDX into a folder, run `blume dev`, and get a production-grade docs site — navigation, search, theming, Open Graph images, and a rich component library — with no app boilerplate to write or maintain. Blume generates and drives a hidden Astro project for you; run `blume eject` to get a standalone Astro app whenever you want full control.
+Поместите Markdown или MDX в папку, запустите `bedocs dev` — и получите production-готовый сайт документации: навигация, поиск, темы, Open Graph-изображения и богатая библиотека компонентов — без написания boilerplate-кода. BeDocs генерирует и управляет скрытым проектом Astro; запустите `bedocs eject`, чтобы получить автономное Astro-приложение, когда нужен полный контроль.
 
-**[Documentation](https://useblume.dev)** · [Quickstart](https://useblume.dev/docs/quickstart) · [Components](https://useblume.dev/docs/content/components) · [CLI](https://useblume.dev/docs/reference/cli)
+**[Документация](https://docs.beandsmedia.ru)** · [Быстрый старт](https://docs.beandsmedia.ru/docs/quickstart) · [Компоненты](https://docs.beandsmedia.ru/docs/content/components) · [CLI](https://docs.beandsmedia.ru/docs/reference/cli)
 
-## Quickstart
+## Быстрый старт
 
-Blume needs **Node.js 22.12 or newer** and a content folder with at least one `.md`/`.mdx` file — there's nothing else to set up.
-
-```bash
-npx blume init
-```
-
-Run the dev server with hot reload:
+BeDocs требует **Node.js 22.12 или новее** и папку с хотя бы одним `.md`/`.mdx` файлом — больше ничего настраивать не нужно.
 
 ```bash
-blume dev
+npx @beands/bedocs init
 ```
 
-Build static HTML, with a local search index, into `dist/`:
+Запустите dev-сервер с горячей перезагрузкой:
 
 ```bash
-blume build
+bedocs dev
 ```
 
-Blume works with any package manager and never requires you to set up Astro or Tailwind yourself.
+Соберите статический HTML с локальным поисковым индексом в `dist/`:
 
-## Features
+```bash
+bedocs build
+```
 
-- **Zero-config, even the template** — a folder of docs is a complete project. No starter to clone, no framework to learn. Configuration is opt-in, one file at a time.
-- **Fast by default** — static HTML on Astro and Vite; the core theme ships no client framework JS so pages score well on Core Web Vitals out of the box.
-- **Type-safe config** — `blume.config.ts` and every `meta.ts` are real TypeScript, validated by a schema and authored with `defineConfig` / `defineMeta`, so your editor catches mistakes before a build.
-- **Components, no imports** — cards, columns, steps, tabs, accordions, badges, code groups, frames, file trees, type tables, live component previews, diffs, and more, usable in any MDX page.
-- **Local search** — Orama runs in dev and production with no hosted service; FlexSearch, Pagefind, Algolia, Typesense, Orama Cloud, and Mixedbread are one setting away.
-- **AI-ready** — `llms.txt` / `llms-full.txt`, raw Markdown at any `.md` URL, Copy as Markdown, Open in chat, an optional Ask AI assistant, and a hosted MCP server so coding agents can search and read your docs directly.
-- **Agent skills** — Blume ships [agent skills](https://useblume.dev/docs/advanced/skills) that teach a coding agent to scaffold, write, and maintain your docs site.
-- **Content sources** — mix local files with remote MDX, GitHub Releases, Notion, Sanity, or any custom backend into a single site.
-- **Internationalization** — drop translated files into place for locale-aware routing, per-language navigation, translated UI, and SEO.
-- **SEO** — metadata, Open Graph images (rendered at build with Takumi), sitemap, `robots.txt`, RSS feeds, and JSON-LD, built in.
-- **API reference** — render an OpenAPI or AsyncAPI spec as an interactive reference (schemas, auth, request playground) via Scalar.
-- **Export** — let readers download any page as a PDF or EPUB, entirely client-side, so static builds stay static.
-- **Customization** — component overrides, React islands, custom pages, Tailwind v4 theme tokens and `theme.css`, and a source-component registry (`blume add`).
-- **Eject** — `blume eject` produces a standalone Astro project that still uses the `blume` package.
+BeDocs работает с любым пакетным менеджером и не требует настройки Astro или Tailwind вручную.
+
+## Возможности
+
+- **Нулевая конфигурация** — папка с документацией это готовый проект. Конфигурация опциональна, по одному файлу за раз.
+- **Быстро по умолчанию** — статический HTML на Astro и Vite; базовая тема не содержит клиентского JS фреймворка.
+- **Типобезопасная конфигурация** — `bedocs.config.ts` и каждый `meta.ts` — настоящий TypeScript с валидацией через схему.
+- **Компоненты без импортов** — карточки, колонки, шаги, вкладки, аккордеоны, бейджи, группы кода, файловые деревья, таблицы типов, превью компонентов, diff-блоки и более.
+- **Локальный поиск** — Orama работает в dev и production без внешнего сервиса; FlexSearch, Pagefind, Algolia, Typesense, Orama Cloud и Mixedbread — одной настройкой.
+- **Готовность к ИИ** — `llms.txt` / `llms-full.txt`, Markdown по любому `.md` URL, Ask AI-ассистент и MCP-сервер для агентов.
+- **Источники контента** — локальные файлы, удалённый MDX, GitHub Releases, Notion, Sanity или любой кастомный бэкенд.
+- **Интернационализация** — локаль-зависимая маршрутизация, навигация и UI на каждом языке. Русский — по умолчанию.
+- **SEO** — метаданные, Open Graph-изображения, sitemap, `robots.txt`, RSS-фиды и JSON-LD встроены.
+- **Справочник API** — рендеринг OpenAPI или AsyncAPI спецификаций через Scalar.
+- **Экспорт** — читатели могут скачать любую страницу как PDF или EPUB, полностью на стороне клиента.
+- **Кастомизация** — переопределение компонентов, React-острова, кастомные страницы, Tailwind v4 theme tokens и реестр компонентов (`bedocs add`).
+- **Eject** — `bedocs eject` создаёт автономный проект Astro, использующий пакет `@beands/bedocs`.
 
 ## CLI
 
-| Command            | Description                                           |
+| Команда            | Описание                                              |
 | ------------------ | ----------------------------------------------------- |
-| `blume init [dir]` | Scaffold a project (interactive by default).          |
-| `blume dev`        | Start the dev server with hot reload.                 |
-| `blume build`      | Build the static (or server) site.                    |
-| `blume preview`    | Preview the last build.                               |
-| `blume add <item>` | Install a source component from the registry.         |
-| `blume sync`       | Re-fetch remote content sources and regenerate.       |
-| `blume eject`      | Promote the runtime into a standalone Astro app.      |
-| `blume check`      | Type-check the docs site with `astro check`.          |
-| `blume validate`   | Validate internal, anchor, asset, and external links. |
-| `blume doctor`     | Diagnose config and content problems.                 |
+| `bedocs init [dir]`| Создать проект (интерактивно по умолчанию).           |
+| `bedocs dev`       | Запустить dev-сервер с горячей перезагрузкой.         |
+| `bedocs build`     | Собрать статический (или серверный) сайт.             |
+| `bedocs preview`   | Предпросмотр последней сборки.                        |
+| `bedocs add <item>`| Установить компонент из реестра.                      |
+| `bedocs sync`      | Обновить удалённые источники и регенерировать.        |
+| `bedocs eject`     | Преобразовать runtime в автономное Astro-приложение.  |
+| `bedocs check`     | Проверка типов через `astro check`.                   |
+| `bedocs validate`  | Проверка внутренних, якорных и внешних ссылок.        |
+| `bedocs doctor`    | Диагностика проблем конфигурации и контента.          |
 
-See the [CLI reference](https://useblume.dev/docs/reference/cli) for every flag.
+## Как это работает
 
-## How it works
+CLI BeDocs загружает `bedocs.config.ts`, сканирует контент в граф и генерирует скрытый проект Astro в `.bedocs/`, управляя им для dev и build. Astro рендерит через catch-all страницу, импортирующую компоненты BeDocs, сгенерированные данные и ваши переопределения. `.bedocs/` регенерируется при каждом запуске — записываются только изменённые файлы, поэтому горячая перезагрузка остаётся быстрой — пока вы не запустите `bedocs eject`.
 
-The Blume CLI loads `blume.config.ts`, scans your content into a graph, and generates a hidden Astro project under `.blume/` that it drives for dev and build. Astro renders through a catch-all page that imports Blume's shipped components, the generated data, and your overrides. `.blume/` is regenerated on each run — only changed files are written, so hot reload stays fast — until you `blume eject` and own it.
+## Развёртывание
 
-## Deployment
+`bedocs build` выводит статический HTML в `dist/` — разворачивайте на любом статическом хостинге (Vercel, Netlify, Cloudflare Pages, GitHub Pages, S3 + CloudFront). Для функций времени запроса (Ask AI, MCP-сервер) переключитесь на server output и выберите адаптер:
 
-`blume build` outputs static HTML to `dist/` — deploy to any static host (Vercel, Netlify, Cloudflare Pages, GitHub Pages, S3 + CloudFront, or any CDN). For request-time features like Ask AI or the MCP server, switch to server output and pick an adapter:
+| Адаптер      | Назначение                          |
+| ------------ | ----------------------------------- |
+| `vercel`     | Vercel                              |
+| `netlify`    | Netlify Functions                   |
+| `node`       | Self-hosted Node, контейнеры        |
+| `cloudflare` | Cloudflare Workers и Pages          |
 
-| Adapter      | Use for                              |
-| ------------ | ------------------------------------ |
-| `vercel`     | Vercel                               |
-| `netlify`    | Netlify Functions                    |
-| `node`       | Self-hosted Node servers, containers |
-| `cloudflare` | Cloudflare Workers and Pages         |
+На Vercel, Netlify и Cloudflare Pages адаптер и URL определяются автоматически.
 
-On Vercel, Netlify, and Cloudflare Pages the matching adapter and site URL are detected automatically.
+## Совместимость
 
-## Compatibility
+| Требование        | Поддержка                         |
+| ----------------- | --------------------------------- |
+| Node              | 22.12+                            |
+| Пакетные менеджеры| Bun, pnpm, npm, yarn              |
+| Адаптеры          | Vercel, Netlify, Node, Cloudflare |
 
-| Requirement      | Supported                         |
-| ---------------- | --------------------------------- |
-| Node             | 22.12+                            |
-| Package managers | Bun, pnpm, npm, yarn              |
-| Adapters         | Vercel, Netlify, Node, Cloudflare |
+## Разработка
 
-## Development
-
-This repository is a monorepo: the published package lives in `packages/blume`, and `apps/docs` is Blume's own documentation, built with Blume.
+Этот репозиторий — монорепо: публикуемый пакет находится в `packages/blume`, а `apps/docs` — собственная документация BeDocs, собранная с помощью BeDocs.
 
 ```bash
 bun install
-bun run check       # lint + format (Ultracite)
+bun run check       # lint + форматирование
 bun run typecheck
 bun run test
 ```
 
-See [CONTRIBUTING.md](https://github.com/haydenbleasel/blume/blob/main/.github/CONTRIBUTING.md) for architecture and conventions.
+См. [CONTRIBUTING.md](./CONTRIBUTING.md) для архитектуры и соглашений.
 
-## License
+## Апстрим
 
-[MIT](./LICENSE) © Hayden Bleasel
+BeDocs — форк [Blume](https://github.com/haydenbleasel/blume) от Hayden Bleasel. См. [UPSTREAM.md](./UPSTREAM.md) для информации о синхронизации с апстримом.
+
+## Лицензия
+
+[MIT](./LICENSE) © Hayden Bleasel, BeandsMedia

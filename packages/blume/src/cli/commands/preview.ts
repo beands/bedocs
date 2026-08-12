@@ -16,7 +16,7 @@ export const previewCommand = defineCommand({
     port: { description: "Port to listen on.", type: "string" },
   },
   meta: {
-    description: "Preview the last production build.",
+    description: "Предпросмотр последней production-сборки.",
     name: "preview",
   },
   async run({ args }) {
@@ -25,7 +25,7 @@ export const previewCommand = defineCommand({
     const context = resolveProjectContext(root, config);
 
     if (!existsSync(join(context.outDir, "astro.config.mjs"))) {
-      logger.error("No build found. Run `blume build` first.");
+      logger.error("No build found. Run `bedocs build` first.");
       process.exit(1);
     }
 

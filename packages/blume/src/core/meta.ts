@@ -85,7 +85,7 @@ export const discoverFolderMeta = async (
         cwd: source.root,
         // Never descend into dependencies or build output — relevant when the
         // root is the project root (e.g. a `.`-rooted or all-staged project).
-        ignore: ["**/node_modules/**", "**/.blume/**", "**/dist/**"],
+        ignore: ["**/node_modules/**", "**/.bedocs/**", "**/dist/**"],
         onlyFiles: true,
       });
       const loaded = await Promise.all(

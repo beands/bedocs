@@ -1,6 +1,6 @@
 import type { ResolvedConfig } from "./schema.ts";
 
-/** The deployment platforms Blume can infer from runtime/CI env vars. */
+/** The deployment platforms BeDocs can infer from runtime/CI env vars. */
 type DeploymentAdapter = NonNullable<ResolvedConfig["deployment"]["adapter"]>;
 
 interface Platform {

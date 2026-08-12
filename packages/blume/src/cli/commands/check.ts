@@ -14,7 +14,7 @@ export const checkCommand = defineCommand({
   args: {
     isolated: {
       description:
-        "Type-check in an isolated .blume-verify runtime so a running dev server is untouched. For verifying changes while `blume dev` runs.",
+        "Type-check in an isolated .bedocs-verify runtime so a running dev server is untouched. For verifying changes while `bedocs dev` runs.",
       type: "boolean",
     },
     preview: {
@@ -27,21 +27,21 @@ export const checkCommand = defineCommand({
     },
   },
   meta: {
-    description: "Type-check the docs site with astro check.",
+    description: "Проверка типов документации с помощью astro check.",
     name: "check",
   },
   async run({ args }) {
     const root = process.cwd();
 
-    // `blume check` regenerates `.blume` just like `build`, so it must refuse a
-    // live dev server unless isolated. `--isolated` (or BLUME_RUNTIME_DIR)
-    // relocates the runtime to `.blume-verify`, which dev never locks.
+    // `bedocs check` regenerates `.bedocs` just like `build`, so it must refuse a
+    // live dev server unless isolated. `--isolated` (or BEDOCS_RUNTIME_DIR)
+    // relocates the runtime to `.bedocs-verify`, which dev never locks.
     const runtimeDir = args.isolated
-      ? ".blume-verify"
-      : process.env.BLUME_RUNTIME_DIR;
+      ? ".bedocs-verify"
+      : process.env.BEDOCS_RUNTIME_DIR;
     refuseIfDevRunning(root, "checking", { isolatedHint: true, runtimeDir });
     if (args.isolated) {
-      await ensureGitignore(root, [".blume-verify/"]);
+      await ensureGitignore(root, [".bedocs-verify/"]);
     }
 
     const project = await prepareProject({
@@ -54,12 +54,12 @@ export const checkCommand = defineCommand({
 
     const { outDir } = project.context;
 
-    // Generate Astro's content/collection and font types into `.blume/.astro`
+    // Generate Astro's content/collection and font types into `.bedocs/.astro`
     // so `astro:*` virtual modules resolve during the check.
     await sync({ logLevel: "warn", root: outDir });
 
     // The project-root tsconfig is what covers the authored `pages/` and config;
-    // without it astro check only sees the generated `.blume` project. Falls back
+    // without it astro check only sees the generated `.bedocs` project. Falls back
     // to the generated project's own tsconfig when the project has none.
     const tsconfig = join(root, "tsconfig.json");
 

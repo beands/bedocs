@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { basename, join } from "pathe";
 import { glob } from "tinyglobby";
 
-/** Astro hydration directives Blume applies to a convention island. */
+/** Astro hydration directives BeDocs applies to a convention island. */
 export type IslandClientMode = "idle" | "load" | "only" | "visible";
 
 /** Client framework an island is authored in, inferred from its extension. */

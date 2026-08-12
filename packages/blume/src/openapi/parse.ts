@@ -8,7 +8,7 @@ import { hashText } from "../core/sources/cache.ts";
 import type { ApiDocument } from "./model.ts";
 
 /**
- * Spec loading and normalization. Blume reuses Scalar's parser
+ * Spec loading and normalization. BeDocs reuses Scalar's parser
  * (`@scalar/openapi-parser`) to read a spec (YAML or JSON), then upgrade Swagger
  * 2.0 / OpenAPI 3.0 documents to 3.1 so the renderer only handles one shape.
  * Internal `$ref`s are deliberately left in place (see `model.ts`).
@@ -32,7 +32,7 @@ const MAX_RETRY_WAIT_MS = 10_000;
 const SECOND_MS = 1000;
 // Worth another try: request timeout, too-early, rate-limited, and the 5xx range.
 const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
-const USER_AGENT = "blume (+https://github.com/haydenbleasel/blume)";
+const USER_AGENT = "bedocs (+https://github.com/beandsmedia/bedocs)";
 const PROXY_ENV_VARS = [
   "HTTP_PROXY",
   "http_proxy",

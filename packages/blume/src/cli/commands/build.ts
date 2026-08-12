@@ -110,7 +110,7 @@ const emitRedirectFiles = async (
     return;
   }
   await writeFile(
-    join(distDir, "blume-redirects.json"),
+    join(distDir, "bedocs-redirects.json"),
     buildRedirectManifest(redirects),
     "utf-8"
   );
@@ -705,7 +705,7 @@ export const buildCommand = defineCommand({
     },
     isolated: {
       description:
-        "Build into an isolated .blume-verify runtime (and its own dist) so a running dev server and the real dist/ are untouched. For verifying changes while `blume dev` runs.",
+        "Build into an isolated .bedocs-verify runtime (and its own dist) so a running dev server and the real dist/ are untouched. For verifying changes while `bedocs dev` runs.",
       type: "boolean",
     },
     output: {
@@ -724,22 +724,22 @@ export const buildCommand = defineCommand({
     },
   },
   meta: {
-    description: "Build the docs site for production.",
+    description: "Собрать сайт документации для production.",
     name: "build",
   },
   async run({ args }) {
     const root = process.cwd();
 
-    // `--isolated` (or BLUME_RUNTIME_DIR) relocates the whole runtime to a
-    // sibling dir so this build never touches a live dev server's `.blume/` or
+    // `--isolated` (or BEDOCS_RUNTIME_DIR) relocates the whole runtime to a
+    // sibling dir so this build never touches a live dev server's `.bedocs/` or
     // the user's real `dist/`. A non-default runtime dir has no dev lock, so the
     // refusal below lets it proceed; a plain build still refuses.
     const runtimeDir = args.isolated
-      ? ".blume-verify"
-      : process.env.BLUME_RUNTIME_DIR;
+      ? ".bedocs-verify"
+      : process.env.BEDOCS_RUNTIME_DIR;
     refuseIfDevRunning(root, "building", { isolatedHint: true, runtimeDir });
     if (args.isolated) {
-      await ensureGitignore(root, [".blume-verify/"]);
+      await ensureGitignore(root, [".bedocs-verify/"]);
     }
 
     if (args.output && args.output !== "static" && args.output !== "server") {
@@ -780,7 +780,7 @@ export const buildCommand = defineCommand({
     // compiles and renders. Skip the network post-steps (search sync) and
     // deploy artifacts (index/llms/sitemap/robots/redirects) that only matter
     // for a real publish and would push to hosted providers. The bundle report
-    // and budget gate still run, though — `blume build --isolated --budget-js
+    // and budget gate still run, though — `bedocs build --isolated --budget-js
     // 100` exiting 0 without measuring anything would be a silent false pass
     // in CI.
     if (runtimeDir) {
@@ -804,8 +804,8 @@ export const buildCommand = defineCommand({
       await ensureGitignore(root, [ignoreDir]);
     }
 
-    // Netlify writes its deploy bundle relative to the Astro root — which Blume
-    // points at the hidden `.blume` runtime — so the bundle lands where the
+    // Netlify writes its deploy bundle relative to the Astro root — which BeDocs
+    // points at the hidden `.bedocs` runtime — so the bundle lands where the
     // deploy platform never looks. Surface it up to the project root before
     // publishing artifacts into the served static dir.
     const surfaced = await surfaceAdapterOutput(

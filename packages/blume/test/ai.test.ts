@@ -822,8 +822,8 @@ const askData: AskData = {
   documents: [
     {
       content:
-        "Install Blume with your package manager, then run the dev server to preview the docs.",
-      description: "How to install Blume",
+        "Install BeDocs with your package manager, then run the dev server to preview the docs.",
+      description: "How to install BeDocs",
       locale: "",
       route: "/guides/install",
       title: "Installation",

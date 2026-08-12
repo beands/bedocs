@@ -148,7 +148,7 @@ describe("labels and lines", () => {
 
   it("renders the header and diagnostics", () => {
     expect(strip(translateHeaderLine(3, 2, "claude"))).toBe(
-      "blume translate  3 item(s) · 2 locale(s) · Claude Code"
+      "bedocs translate  3 item(s) · 2 locale(s) · Claude Code"
     );
     expect(
       diagnosticLines([

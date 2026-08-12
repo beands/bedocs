@@ -31,7 +31,7 @@ const canonicalChecks = (
   }
 
   if (!page.canonical) {
-    // Without `deployment.site` Blume has no absolute URL to canonicalize to, so
+    // Without `deployment.site` BeDocs has no absolute URL to canonicalize to, so
     // report the root cause once (in the sitemap/robots checks) rather than
     // flagging every page for a config field they can't fix individually.
     return site
@@ -129,7 +129,7 @@ export const indexabilityChecks: CheckModule = {
   run(context) {
     const found: Diagnostic[] = [];
 
-    // Without `deployment.site` Blume has no absolute URL to build from, so it
+    // Without `deployment.site` BeDocs has no absolute URL to build from, so it
     // cannot emit a canonical, an Open Graph image, or a sitemap on *any* page.
     // That's one fact about the config, not a defect on each of 200 pages —
     // report it once, and let the checks that depend on it stay quiet.

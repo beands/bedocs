@@ -5,7 +5,7 @@ import { parseYouTubeId } from "../components/content/youtube.ts";
 import type { ExampleLookup } from "../core/types.ts";
 
 /**
- * Downlevel Blume's MDX components to plain Markdown for agent-facing output
+ * Downlevel BeDocs's MDX components to plain Markdown for agent-facing output
  * (the `/<route>.md` mirror, llms-full.txt, MCP `get_page`). Each supported
  * component has a serializer — its "toString" — that renders the same
  * information as the Astro component, but as portable Markdown: `<TypeTable>`

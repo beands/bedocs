@@ -15,7 +15,7 @@ export const mcpStdioCommand = defineCommand({
   },
   meta: {
     description:
-      "Serve an MCP data snapshot over stdio (internal, used by `blume eval`).",
+      "MCP-сервер снимка данных через stdio (внутренняя команда для `bedocs eval`).",
     name: "mcp-stdio",
   },
   async run({ args }) {
@@ -27,7 +27,7 @@ export const mcpStdioCommand = defineCommand({
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       process.stderr.write(
-        `blume mcp-stdio: cannot load the snapshot at ${args.data}: ${detail}\n`
+        `bedocs mcp-stdio: cannot load the snapshot at ${args.data}: ${detail}\n`
       );
       process.exit(1);
     }

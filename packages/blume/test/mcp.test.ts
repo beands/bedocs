@@ -241,7 +241,7 @@ describe("MCP content-type filtering", () => {
     documents: [
       ...DATA.documents.map((doc) => ({ ...doc, contentType: "doc" })),
       {
-        content: "RFC: how Blume endpoints declare request schemas.",
+        content: "RFC: how BeDocs endpoints declare request schemas.",
         contentType: "rfc",
         description: "RFC for request validation",
         facets: { domain: "architecture", status: "enforced" },
@@ -566,14 +566,14 @@ describe("orama index helpers", () => {
   it("filters results to the requested content types", async () => {
     const db = await buildOramaIndex([
       {
-        content: "Install Blume with your package manager.",
+        content: "Install BeDocs with your package manager.",
         contentType: "doc",
         description: "",
         route: "/install",
         title: "Install",
       },
       {
-        content: "RFC: how Blume endpoints declare request schemas.",
+        content: "RFC: how BeDocs endpoints declare request schemas.",
         contentType: "rfc",
         description: "",
         route: "/rfcs/schemas",
@@ -581,7 +581,7 @@ describe("orama index helpers", () => {
       },
       {
         // No contentType (a pre-upgrade index entry): excluded by any filter.
-        content: "Blume changelog for the current release.",
+        content: "BeDocs changelog for the current release.",
         description: "",
         route: "/changelog",
         title: "Changelog",
@@ -606,7 +606,7 @@ describe("orama index helpers", () => {
   it("filters results to documents matching every facet", async () => {
     const db = await buildOramaIndex([
       {
-        content: "Blume RFC on request schemas.",
+        content: "BeDocs RFC on request schemas.",
         contentType: "rfc",
         description: "",
         facets: { domain: "architecture", status: "enforced" },
@@ -614,7 +614,7 @@ describe("orama index helpers", () => {
         title: "Request schemas",
       },
       {
-        content: "Blume RFC on naming conventions.",
+        content: "BeDocs RFC on naming conventions.",
         contentType: "rfc",
         description: "",
         facets: { domain: "architecture", status: "draft" },
@@ -623,7 +623,7 @@ describe("orama index helpers", () => {
       },
       {
         // No facets: excluded by any facet filter.
-        content: "Blume installation guide.",
+        content: "BeDocs installation guide.",
         contentType: "doc",
         description: "",
         route: "/install",

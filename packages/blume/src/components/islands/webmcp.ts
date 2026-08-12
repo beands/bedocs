@@ -3,7 +3,7 @@ import { joinBase, prefixBase } from "./base-path.ts";
 
 /**
  * WebMCP (W3C Web Machine Learning CG): in-page tools an agentic browser can
- * call, registered on the page's model context. Blume exposes the same
+ * call, registered on the page's model context. BeDocs exposes the same
  * read-only surface its hosted MCP server has — search, page Markdown, the
  * docs index — so an agent driving the browser needs no separate connection.
  * The module is inert everywhere else: registration is attempted only when

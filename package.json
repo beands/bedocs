@@ -1,5 +1,5 @@
 {
-  "name": "blume-monorepo",
+  "name": "bedocs-monorepo",
   "private": true,
   "workspaces": [
     "packages/*",
@@ -19,6 +19,8 @@
     "release": "turbo run build --filter=!video && changeset publish",
     "bundle-docs": "node packages/blume/scripts/bundle-docs.mjs",
     "prepare": "husky && node packages/blume/scripts/bundle-docs.mjs",
+    "check-branding": "node scripts/check-branding.mjs",
+    "check-translations": "node scripts/check-translations.mjs",
     "bump-deps": "npx npm-check-updates -u --deep && bun i"
   },
   "devDependencies": {

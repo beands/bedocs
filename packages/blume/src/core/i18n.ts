@@ -8,7 +8,7 @@ import { UI_PACKS } from "./ui-packs/index.ts";
  * goes through these helpers so the routing rules live in exactly one place.
  */
 
-/** Locale codes Blume recognizes (those it ships a UI pack for, plus English). */
+/** Locale codes BeDocs recognizes (those it ships a UI pack for, plus English). */
 const KNOWN_LOCALES = new Set(
   [...Object.keys(UI_PACKS), "en"].map((code) => code.toLowerCase())
 );

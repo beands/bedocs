@@ -226,7 +226,8 @@ const packFor = (code: string): UIStringsOverride | undefined => {
  * Resolve the active dictionary for a locale. Layers, in order:
  * English baseline ← default-locale pack ← default-locale override ←
  * locale pack ← locale override. So a missing key falls back to the default
- * locale's translation, then to English.
+ * locale's translation, then to English. BeDocs defaults to Russian for
+ * single-locale sites.
  */
 export const resolveUIStrings = (
   locale: string,

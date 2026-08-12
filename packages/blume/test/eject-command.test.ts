@@ -61,7 +61,7 @@ const runEject = async (
   return { exitCode, output: `${stdout}${stderr}` };
 };
 
-describe("blume eject", () => {
+describe("bedocs eject", () => {
   it("refuses without --yes and writes nothing", async () => {
     const root = await fixture({
       "docs/index.md": "---\ntitle: Home\n---\n# Home\n",

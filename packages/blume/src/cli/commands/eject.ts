@@ -12,7 +12,7 @@ import { commandsFor, detectPackageManager } from "../init/scaffold.ts";
 import { logger } from "../log.ts";
 
 /**
- * Warn which `blume build` post-build artifacts the ejected app stops
+ * Warn which `bedocs build` post-build artifacts the ejected app stops
  * producing. Printed both at the confirmation (so the decision is informed)
  * and after `--yes` (so a direct eject still sees it). No-op when the config
  * activates none of them.
@@ -23,7 +23,7 @@ const reportDroppedArtifacts = (notices: string[]): void => {
   }
   logger.warn(
     [
-      "The ejected build script runs plain `astro build`, which stops producing these `blume build` artifacts:",
+      "The ejected build script runs plain `astro build`, which stops producing these `bedocs build` artifacts:",
       ...notices.map((notice) => `  - ${notice}`),
     ].join("\n")
   );
@@ -34,7 +34,7 @@ export const ejectCommand = defineCommand({
     yes: { description: "Skip the confirmation prompt.", type: "boolean" },
   },
   meta: {
-    description: "Promote the generated runtime into an owned Astro project.",
+    description: "Выгрузить генерируемый runtime в самостоятельный Astro-проект.",
     name: "eject",
   },
   async run({ args }) {
@@ -55,7 +55,7 @@ export const ejectCommand = defineCommand({
 
     if (!args.yes) {
       logger.warn(
-        "Eject is one-way: it writes astro.config.mjs, src/, and (if absent) tsconfig.json, rewrites your package.json scripts, and removes .blume. An existing tsconfig.json is left untouched."
+        "Eject is one-way: it writes astro.config.mjs, src/, and (if absent) tsconfig.json, rewrites your package.json scripts, and removes .bedocs. An existing tsconfig.json is left untouched."
       );
       reportDroppedArtifacts(notices);
       logger.info("Re-run with --yes to proceed.");
@@ -77,11 +77,11 @@ export const ejectCommand = defineCommand({
     }
     reportDroppedArtifacts(notices);
     // Print run commands matching the user's package manager, detected the
-    // same way as `blume init`'s next-steps hint.
+    // same way as `bedocs init`'s next-steps hint.
     const pm = detectPackageManager(process.env.npm_config_user_agent);
     const { build, dev } = commandsFor(pm);
     logger.box(
-      `Your project is now a standalone Astro app.\n\n  ${dev}\n  ${build}\n\nThe blume package remains importable.`
+      `Your project is now a standalone Astro app.\n\n  ${dev}\n  ${build}\n\nThe bedocs package remains importable.`
     );
   },
 });

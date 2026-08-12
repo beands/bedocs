@@ -5,7 +5,7 @@ import type {
   SidebarDisplay,
 } from "./schema.ts";
 
-/** Severity levels for Blume diagnostics. */
+/** Severity levels for BeDocs diagnostics. */
 export type DiagnosticSeverity = "error" | "warning" | "info";
 
 /**
@@ -21,7 +21,7 @@ export interface Diagnostic {
   column?: number;
   /**
    * The built URL this diagnostic is about, for findings that are a property of
-   * the output rather than of a source file (`blume audit`). Set alongside
+   * the output rather than of a source file (`bedocs audit`). Set alongside
    * `file`/`line` where the page maps back to authored content, so a finding can
    * name both the URL that's wrong and the frontmatter line that fixes it.
    */
@@ -75,7 +75,7 @@ export interface ProjectContext {
   contentRoot: string;
   /** Absolute path to the custom pages dir, if it exists. */
   pagesRoot: string | null;
-  /** Absolute path to the generated runtime (`<root>/.blume`). */
+  /** Absolute path to the generated runtime (`<root>/.bedocs`). */
   outDir: string;
   /**
    * Absolute path to the Astro build output. `<root>/dist` normally; for a
@@ -105,7 +105,7 @@ export interface PageRecord {
   sourcePath?: string;
   /**
    * Renderable body captured at scan time. Set for staged (non-filesystem)
-   * sources so they can be materialized to `.blume/content` and so soft
+   * sources so they can be materialized to `.bedocs/content` and so soft
    * consumers need no re-read; omitted for filesystem entries (read from disk).
    */
   body?: { format: "md" | "mdx"; text: string };

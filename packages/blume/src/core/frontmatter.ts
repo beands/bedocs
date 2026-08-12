@@ -4,9 +4,9 @@ import { dump, load } from "js-yaml";
 // gray-matter@4 binds js-yaml 3's `safeLoad`/`safeDump` as its default YAML
 // engine. In a workspace that pins js-yaml to v4 — where those functions were
 // removed — parsing front matter throws "Function yaml.safeLoad is removed in
-// js-yaml 4." Every Blume front-matter call routes through this `matter`
+// js-yaml 4." Every BeDocs front-matter call routes through this `matter`
 // wrapper, which supplies an explicit engine built on `load`/`dump`. Both exist
-// in js-yaml 3 and 4, so Blume is immune to whichever version the consumer's
+// in js-yaml 3 and 4, so BeDocs is immune to whichever version the consumer's
 // install resolves for gray-matter.
 
 type MatterInput = Parameters<typeof baseMatter>[0];

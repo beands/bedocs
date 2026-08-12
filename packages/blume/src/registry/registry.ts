@@ -2,13 +2,13 @@ import { join } from "pathe";
 
 import { packageRoot } from "../core/package-root.ts";
 
-/** A file copied into the user's project by `blume add`. */
+/** A file copied into the user's project by `bedocs add`. */
 export interface RegistryFile {
-  /** Path to the source file, relative to the blume package `src` directory. */
+  /** Path to the source file, relative to the bedocs package `src` directory. */
   source: string;
   /** Destination path relative to the project root. */
   target: string;
-  /** Rewrite the file's relative imports to `blume/*` specifiers on copy. */
+  /** Rewrite the file's relative imports to `@beands/bedocs/*` specifiers on copy. */
   rewrite?: boolean;
 }
 
@@ -20,12 +20,12 @@ export interface RegistryItem {
   postInstall: string[];
 }
 
-/** Absolute path to the blume package `src` directory (the copy source root). */
+/** Absolute path to the bedocs package `src` directory (the copy source root). */
 export const packageSrc = join(packageRoot(), "src");
 
 /**
- * A built-in layout component offered as editable source. `blume add` rewrites
- * its relative imports to `blume/*`, so it renders identically to the built-in
+ * A built-in layout component offered as editable source. `bedocs add` rewrites
+ * its relative imports to `@beands/bedocs/*`, so it renders identically to the built-in
  * until the user changes it, then registers under the matching `layout` slot.
  */
 const layoutComponent = (config: {
@@ -36,7 +36,7 @@ const layoutComponent = (config: {
   /** Layout slot key, also the import name in the post-install hint. */
   slot: string;
 }): RegistryItem => {
-  const target = `components/blume/${config.file}`;
+  const target = `components/bedocs/${config.file}`;
   return {
     description: config.description,
     files: [
@@ -49,12 +49,12 @@ const layoutComponent = (config: {
     name: config.name,
     postInstall: [
       "Register it in components.ts:",
-      '  import { defineComponents } from "blume";',
+      '  import { defineComponents } from "@beands/bedocs";',
       `  import ${config.slot} from "./${target}";`,
       "",
       `  export default defineComponents({ layout: { ${config.slot} } });`,
       "",
-      "It imports the rest from `blume/*`, so it matches the built-in until you edit it.",
+      "It imports the rest from `@beands/bedocs/*`, so it matches the built-in until you edit it.",
     ],
   };
 };
@@ -72,7 +72,7 @@ const contentComponent = (config: {
   /** MDX tag / component name, also the import name in the post-install hint. */
   tag: string;
 }): RegistryItem => {
-  const target = `components/blume/${config.file}`;
+  const target = `components/bedocs/${config.file}`;
   return {
     description: config.description,
     files: [
@@ -85,17 +85,17 @@ const contentComponent = (config: {
     name: config.name,
     postInstall: [
       "Register it in components.ts:",
-      '  import { defineComponents } from "blume";',
+      '  import { defineComponents } from "@beands/bedocs";',
       `  import ${config.tag} from "./${target}";`,
       "",
       `  export default defineComponents({ mdx: { ${config.tag} } });`,
       "",
-      "It imports the rest from `blume/*`, so it matches the built-in until you edit it.",
+      "It imports the rest from `@beands/bedocs/*`, so it matches the built-in until you edit it.",
     ],
   };
 };
 
-/** Every user-facing content component, by `blume add` name → source basename. */
+/** Every user-facing content component, by `bedocs add` name → source basename. */
 const CONTENT_COMPONENTS: {
   name: string;
   description: string;

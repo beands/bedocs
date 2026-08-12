@@ -10,12 +10,12 @@ import type { ResolvedConfig } from "./schema.ts";
 import type { Diagnostic } from "./types.ts";
 
 /**
- * Define a Blume site's configuration with full type-checking and editor
- * autocomplete. Place the call in `blume.config.ts` at your project root and
+ * Define a BeDocs site's configuration with full type-checking and editor
+ * autocomplete. Place the call in `bedocs.config.ts` at your project root and
  * `export default` the result:
  *
  * ```ts
- * import { defineConfig } from "blume";
+ * import { defineConfig } from "@beands/bedocs";
  *
  * export default defineConfig({
  *   title: "Acme Docs",
@@ -29,7 +29,7 @@ import type { Diagnostic } from "./types.ts";
  *
  * This is an identity helper: it returns its input unchanged and exists purely
  * for type inference (and as a stable home for future plugin hooks). The object
- * is validated against the Blume schema when the CLI loads it.
+ * is validated against the BeDocs schema when the CLI loads it.
  *
  * ## Top-level fields
  *
@@ -86,7 +86,7 @@ import type { Diagnostic } from "./types.ts";
  *   GA, …).
  *
  * **Astro**
- * - `integrations` — Astro integrations appended after Blume's built-ins, in
+ * - `integrations` — Astro integrations appended after BeDocs' built-ins, in
  *   declaration order. Install and maintain each integration in the site.
  *
  * **Deployment & i18n**
@@ -140,7 +140,7 @@ import type { Diagnostic } from "./types.ts";
  *
  * @param config - The site configuration. All fields are optional.
  * @returns The same config object, typed for inference.
- * @see https://useblume.dev/docs for the full configuration reference.
+ * @see https://docs.beandsmedia.ru/docs for the full configuration reference.
  */
 export const defineConfig = (config: BlumeConfig): BlumeConfig => config;
 
@@ -168,7 +168,7 @@ const importConfigModule = createModuleLoader();
 export const loadConfig = async (
   root: string,
   /**
-   * Supplied only by `blume dev`: the local dev server URL, used as the
+   * Supplied only by `bedocs dev`: the local dev server URL, used as the
    * `deployment.site` fallback when none is configured or detected. Builds
    * never pass it, so production output can't end up pointing at localhost.
    */
@@ -184,7 +184,7 @@ export const loadConfig = async (
       throw new BlumeError({
         code: "BLUME_CONFIG_LOAD_FAILED",
         file: configFile,
-        message: `Failed to load config: ${(error as Error).message}`,
+        message: `Ошибка загрузки конфигурации: ${(error as Error).message}`,
         severity: "error",
       });
     }
@@ -213,7 +213,7 @@ export const loadConfig = async (
     const primary = first ?? {
       code: "BLUME_CONFIG_INVALID",
       file: configFile ?? undefined,
-      message: "Invalid Blume config.",
+      message: "Некорректная конфигурация BeDocs.",
       severity: "error" as const,
     };
     // Surface every issue in one failing run — reporting only the first turns

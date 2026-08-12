@@ -12,8 +12,8 @@ import { resolveRuntimeDir } from "../core/project.ts";
 import { logger } from "./log.ts";
 
 /**
- * A best-effort PID lock in the shared `.blume/` runtime dir. `blume dev`
- * regenerates and serves `.blume` continuously, so a concurrent `build`,
+ * A best-effort PID lock in the shared `.bedocs/` runtime dir. `bedocs dev`
+ * regenerates and serves `.bedocs` continuously, so a concurrent `build`,
  * `eject`, or second `dev` that regenerates or deletes it out from under the
  * running Vite server corrupts the dev session. The lock lets those commands
  * detect a live dev server and refuse — and, because it records the server's
@@ -68,7 +68,7 @@ const isProcessAlive = (pid: number): boolean => {
 };
 
 /**
- * Read the lock on `outDir` held by a live `blume dev`, or null. A lock left
+ * Read the lock on `outDir` held by a live `bedocs dev`, or null. A lock left
  * by a process that has since exited (stale) is treated as absent.
  */
 export const readDevLock = (outDir: string): DevLockInfo | null => {
@@ -80,7 +80,7 @@ export const readDevLock = (outDir: string): DevLockInfo | null => {
   return lock && isProcessAlive(lock.pid) ? lock : null;
 };
 
-/** Whether another live `blume dev` holds the lock on `outDir`. */
+/** Whether another live `bedocs dev` holds the lock on `outDir`. */
 export const isDevLocked = (outDir: string): boolean =>
   readDevLock(outDir) !== null;
 
@@ -94,12 +94,12 @@ const writeLock = (outDir: string, port?: number): void => {
   writeFileSync(lockPath(outDir), lockPayload(port));
 };
 
-/** Thrown when another live `blume dev` already holds the lock. */
+/** Thrown when another live `bedocs dev` already holds the lock. */
 export class DevLockHeldError extends Error {
   readonly lock: DevLockInfo;
 
   constructor(lock: DevLockInfo) {
-    super(`A blume dev server (pid ${lock.pid}) already holds the lock.`);
+    super(`A bedocs dev server (pid ${lock.pid}) already holds the lock.`);
     this.name = "DevLockHeldError";
     this.lock = lock;
   }
@@ -143,7 +143,7 @@ const tryClaimLock = (outDir: string, port?: number): boolean => {
 
 /**
  * Write the current process's dev lock into `outDir` and return a release
- * function. The claim is atomic (`wx`): two `blume dev` processes racing the
+ * function. The claim is atomic (`wx`): two `bedocs dev` processes racing the
  * same dir can't both pass a check-then-write — the loser gets a
  * {@link DevLockHeldError} naming the live holder. A stale lock (dead pid) or
  * this process's own leftover is cleared and re-claimed. The release only
@@ -187,10 +187,10 @@ export const describeDevLock = (lock: DevLockInfo): string =>
   lock.port === undefined ? "" : ` at http://localhost:${lock.port}`;
 
 /**
- * Exit with an error when a live `blume dev` owns the runtime dir under `root`.
+ * Exit with an error when a live `bedocs dev` owns the runtime dir under `root`.
  * `action` names the operation being refused (e.g. "building"). `runtimeDir`
- * relocates the checked dir: an isolated verify (`.blume-verify`) targets a dir
- * dev never locks, so it proceeds; a default or `--runtime-dir .blume` run still
+ * relocates the checked dir: an isolated verify (`.bedocs-verify`) targets a dir
+ * dev never locks, so it proceeds; a default or `--runtime-dir .bedocs` run still
  * refuses. Only commands that actually accept `--isolated` (build, check) should
  * set `isolatedHint`, so the refusal never suggests a flag the command ignores.
  */
@@ -202,10 +202,10 @@ export const refuseIfDevRunning = (
   const lock = readDevLock(resolveRuntimeDir(root, options.runtimeDir));
   if (lock) {
     const remedies = options.isolatedHint
-      ? "Reuse that server, stop it first, or re-run with --isolated to build/verify against .blume-verify without touching it."
+      ? "Reuse that server, stop it first, or re-run with --isolated to build/verify against .bedocs-verify without touching it."
       : "Reuse that server or stop it first.";
     logger.error(
-      `A \`blume dev\` server is running${describeDevLock(lock)}; ${action} would corrupt its .blume runtime. ${remedies}`
+      `A \`bedocs dev\` server is running${describeDevLock(lock)}; ${action} would corrupt its .bedocs runtime. ${remedies}`
     );
     process.exit(1);
   }

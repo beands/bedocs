@@ -152,7 +152,7 @@ export const sitemapChecks: CheckModule = {
     const { sitemap } = context;
     const { site } = context.project.config.deployment;
 
-    // Without `deployment.site` Blume can't emit a sitemap at all (absolute URLs
+    // Without `deployment.site` BeDocs can't emit a sitemap at all (absolute URLs
     // are required), and that's a config choice, not a defect. Stay quiet.
     if (!(site && context.project.config.seo.sitemap)) {
       return [];
@@ -164,7 +164,7 @@ export const sitemapChecks: CheckModule = {
           "BLUME_AUDIT_SITEMAP_INVALID",
           { url: "/sitemap.xml" },
           "The build has no sitemap.xml.",
-          "Set `seo.sitemap: true` and `deployment.site` in blume.config.ts."
+          "Set `seo.sitemap: true` and `deployment.site` in bedocs.config.ts."
         ),
       ];
     }

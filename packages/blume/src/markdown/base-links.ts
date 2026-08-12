@@ -16,7 +16,7 @@ interface MdastUrlContext {
 
 /**
  * A path whose final segment carries a file extension (`/spec.pdf`, `/logo.svg`)
- * — treated as a public asset, which Blume serves from `public/` at the site
+ * — treated as a public asset, which BeDocs serves from `public/` at the site
  * root and does *not* move under `basePath`. Bare page links (`/guide`) have no
  * extension. The rare dotted route (`/releases/v1.0`) is left un-based here; the
  * build-time link checker still resolves it against the route set.

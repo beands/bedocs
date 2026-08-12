@@ -1,5 +1,5 @@
 ---
-// Render a Blume content entry's body inside a custom page — e.g. to feature a
+// Render a BeDocs content entry's body inside a custom page — e.g. to feature a
 // doc on a landing page, or build a bespoke index that still shows real content.
 //
 //   import BlumePage from "blume/components/BlumePage.astro";
@@ -9,7 +9,7 @@
 //   ---
 //   <BlumePage id={intro.entryId} />
 //
-// Blume's built-in MDX components are wired in so callouts, cards, steps, etc.
+// BeDocs's built-in MDX components are wired in so callouts, cards, steps, etc.
 // render as they do on a normal page. Pass `components` to add your own overrides
 // or islands (which live in the generated runtime and aren't imported here). The
 // heavy, opt-in `<Math>` component is not included by default — pass it if the
@@ -55,7 +55,7 @@ import YouTube from "./content/YouTube.astro";
 interface Props {
   /** Astro collection the entry lives in. Defaults to `"docs"`. */
   collection?: string;
-  /** Extra MDX components merged over Blume's built-ins (overrides, islands). */
+  /** Extra MDX components merged over BeDocs's built-ins (overrides, islands). */
   components?: Record<string, unknown>;
   /** Content entry id — e.g. a `BlumeRoute.entryId` from `getBlumeCollection`. */
   id: string;

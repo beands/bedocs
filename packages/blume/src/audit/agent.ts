@@ -50,7 +50,7 @@ export const writeAgentReport = async (
 
 /** The handoff prompt: where the report is, how to read it, and the ground rules. */
 export const fixPrompt = (reportPath: string): string =>
-  `Fix the issues found by \`blume audit\` in this project.
+  `Fix the issues found by \`bedocs audit\` in this project.
 
 The full audit report is at ${reportPath}. It is JSON: each entry in \`diagnostics\` is one finding, with the check \`code\`, a \`message\` explaining what is wrong, the affected page \`url\`, the source \`file\` to edit (relative to the current directory, with a \`line\` when the finding points at a specific front matter key), and a \`suggestion\` describing the fix.
 
@@ -59,7 +59,7 @@ Work through every finding:
 2. Apply each finding's \`suggestion\` by editing the named source file — most fixes are front matter edits at the cited line.
 3. Never fix a finding by deleting a page, removing content, or hiding it from the audit; if a finding genuinely needs a human decision, leave it and say so in your summary.
 
-When you are done, run \`blume build\` and then \`blume audit\` to verify, and repeat until the audit reports no issues.`;
+When you are done, run \`bedocs build\` and then \`bedocs audit\` to verify, and repeat until the audit reports no issues.`;
 
 const spawnAgent = (
   command: string,

@@ -1,7 +1,7 @@
 /**
  * `Accept: text/markdown` content negotiation for Vercel server builds.
  *
- * Blume prerenders every content page — even under `deployment.output:
+ * BeDocs prerenders every content page — even under `deployment.output:
  * "server"` — so a page request never reaches Astro middleware: Vercel serves
  * the prerendered HTML straight from its static layer. Request-time negotiation
  * therefore has to live in the platform's routing config. The Vercel adapter
@@ -89,7 +89,7 @@ export interface NegotiationRoutes {
    * "filesystem"` with `continue`: main-phase headers accumulate and ride on
    * whatever ultimately serves the request. Routes placed after the filesystem
    * marker are the miss phase — they run only when no static file matches, and
-   * every Blume content page is a prerendered static file, so a header route
+   * every BeDocs content page is a prerendered static file, so a header route
    * there never fires.
    */
   headerRoutes: VercelRoute[];

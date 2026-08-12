@@ -328,7 +328,7 @@ describe("prompts", () => {
     const prompt = evalFixPrompt("/tmp/report.json");
     expect(prompt).toContain("/tmp/report.json");
     expect(prompt).toContain("Never delete questions");
-    expect(prompt).toContain("blume eval");
+    expect(prompt).toContain("bedocs eval");
   });
 
   it("initPrompt names the target file and the format", () => {

@@ -260,7 +260,7 @@ export const runTranslate = async (
   const started = performance.now();
   const { i18n } = options.project.config;
   if (!i18n) {
-    throw new Error("blume translate requires i18n to be configured");
+    throw new Error("bedocs translate requires i18n to be configured");
   }
   const source = i18n.locales.find(
     (locale) => locale.code === i18n.defaultLocale

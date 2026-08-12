@@ -4,7 +4,7 @@ import type { AstroIntegration } from "astro";
 
 /**
  * Present a deploy adapter with `root` pointed at the real project root rather
- * than the hidden `.blume` runtime.
+ * than the hidden `.bedocs` runtime.
  *
  * Astro's `root` and `outDir` normally sit together (`outDir` defaults to
  * `<root>/dist`), and `@astrojs/vercel` leans on that: it writes its Build
@@ -12,7 +12,7 @@ import type { AstroIntegration } from "astro";
  * function's dependency closure with `@vercel/nft` using a base derived from
  * `root`, silently dropping every traced file that falls outside it.
  *
- * Blume splits the two: `root` is `<project>/.blume`, so Astro resolves the
+ * BeDocs splits the two: `root` is `<project>/.bedocs`, so Astro resolves the
  * runtime's own `package.json` and its `node_modules` junction, while `outDir`
  * stays at `<project>/dist` so the build lands where users expect. That puts
  * `build.server` (`<outDir>/server`) *outside* `root`, so nft's base excludes
@@ -22,7 +22,7 @@ import type { AstroIntegration } from "astro";
  * npm dependency.
  *
  * A project inside a workspace accidentally escapes this, because nft's base
- * search climbs past `.blume` to the workspace root, which does contain both
+ * search climbs past `.bedocs` to the workspace root, which does contain both
  * `dist/` and `node_modules` — which is why the bug only ever surfaced in
  * standalone projects.
  *

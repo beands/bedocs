@@ -157,7 +157,7 @@ export const formatReport = (
     : `${relative(root, result.staticDir) || "dist"} · offline`;
   lines.push(
     "",
-    `  ${colors.bold("blume audit")}  ${colors.dim(`${result.pages} pages · ${where}`)}`,
+    `  ${colors.bold("bedocs audit")}  ${colors.dim(`${result.pages} pages · ${where}`)}`,
     `  ${summaryLine(counts, auditCount(result))}`,
     ""
   );
@@ -216,7 +216,7 @@ export const formatReport = (
 
 /**
  * The machine-readable report. The existing `diagnostics` + `summary` shape is
- * preserved exactly — anything already parsing `blume validate --json` keeps
+ * preserved exactly — anything already parsing `bedocs validate --json` keeps
  * working — with the audit-specific rollup added alongside it.
  */
 export const reportJson = (result: AuditResult, root: string): string => {

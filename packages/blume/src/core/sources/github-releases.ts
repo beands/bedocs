@@ -61,7 +61,7 @@ const LEADING_V = /^v/iu;
 const NON_SLUG = /[^a-z0-9]+/gu;
 const EDGE_DASHES = /^-+|-+$/gu;
 
-// `blume audit` grades meta descriptions against the 110–160 character search
+// `bedocs audit` grades meta descriptions against the 110–160 character search
 // snippet range (audit/types.ts thresholds), so the derived summary aims for
 // the longest word-boundary cut under the cap.
 const DESCRIPTION_MAX = 160;
@@ -171,7 +171,7 @@ const releaseToEntry = (release: GithubRelease): SourceEntry => {
  * GitHub Releases content source. Pulls a repo's releases from the REST API and
  * materializes each as a `type: changelog` entry, so a project's release notes
  * become its changelog with no files to maintain. A private repo authenticates
- * with `GITHUB_TOKEN`. A snapshot under `.blume/cache/<source>/` keeps rebuilds
+ * with `GITHUB_TOKEN`. A snapshot under `.bedocs/cache/<source>/` keeps rebuilds
  * offline-tolerant.
  */
 export const githubReleasesSource = (

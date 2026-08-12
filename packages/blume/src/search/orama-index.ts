@@ -107,6 +107,22 @@ const addBigrams = (run: string, tokens: Set<string>): void => {
 };
 
 /**
+ * Normalize text for Russian/Cyrillic search: NFC normalization + ё→е folding.
+ * Applied to both indexed content and queries so a search for "ёлка" finds
+ * "елка" and vice versa. Latin text passes through unchanged.
+ */
+const normalizeCyrillic = (text: string): string =>
+  text.normalize("NFC").replaceAll(/[\u0451\u0401]/gu, (ch) =>
+    ch === "\u0451" ? "\u0435" : "\u0415"
+  );
+
+/**
+ * Languages whose text should be Cyrillic-normalized (ё→е, NFC) before
+ * tokenization. Keyed by the primary language subtag of `i18n.defaultLocale`.
+ */
+const CYRILLIC_NORMALIZE_LANGUAGES = new Set(["ru", "be", "bg", "uk", "mk"]);
+
+/**
  * A word-segmenting tokenizer for languages the default splitter can't handle,
  * built on `Intl.Segmenter` (the same engine `@orama/tokenizers` wraps).
  * Input is lowercased before segmenting — unlike the upstream tokenizers —
@@ -165,19 +181,44 @@ const segmentingTokenizer = (locale?: string): Tokenizer | undefined => {
 };
 
 /**
+ * A tokenizer for Cyrillic languages that applies NFC normalization and
+ * ё→е folding before splitting on whitespace/punctuation. Orama's default
+ * tokenizer already splits Cyrillic correctly, but doesn't normalize ё→е,
+ * so "ёлка" and "елка" index as different tokens. This tokenizer ensures
+ * they match. Returns `undefined` for non-Cyrillic languages.
+ */
+const cyrillicTokenizer = (locale?: string): Tokenizer | undefined => {
+  const language = locale?.toLowerCase().split(/[-_]/u)[0] ?? "";
+  if (!CYRILLIC_NORMALIZE_LANGUAGES.has(language)) {
+    return;
+  }
+  return {
+    language,
+    normalizationCache: new Map(),
+    tokenize: (raw: string): string[] => {
+      const normalized = normalizeCyrillic(raw).toLowerCase();
+      // Split on non-word characters (same delimiter class as Orama's default,
+      // but applied after Cyrillic normalization).
+      return normalized
+        .split(/[^\p{L}\p{N}]+/u)
+        .filter((token) => token.length > 0);
+    },
+  };
+};
+
+/**
  * Build an in-memory Orama full-text index from search documents. Shared by the
  * Orama client loader (browser), the MCP server, and Ask AI grounding (Node),
  * so ranking is identical wherever docs are queried. `locale` — the site's
  * `i18n.defaultLocale` — swaps in a word-segmenting tokenizer for languages
- * written without spaces (Japanese, Chinese, Korean, Thai); the tokenizer
- * belongs to the database, so on a mixed-locale site it applies to every
- * document, which is safe because Latin words survive segmentation intact.
+ * written without spaces (Japanese, Chinese, Korean, Thai) or a
+ * Cyrillic-normalizing tokenizer for Russian and other Cyrillic languages.
  */
 export const buildOramaIndex = async (
   documents: OramaDoc[],
   locale?: string
 ): Promise<AnyOrama> => {
-  const tokenizer = segmentingTokenizer(locale);
+  const tokenizer = segmentingTokenizer(locale) ?? cyrillicTokenizer(locale);
   const db = create({
     schema: SCHEMA,
     ...(tokenizer ? { components: { tokenizer } } : {}),
@@ -235,11 +276,17 @@ export const queryOramaIndex = async (
       ? { facetTerms: { containsAll: facetTerms } }
       : {}),
   };
+  // Normalize the query term for Cyrillic languages (ё→е, NFC) so search
+  // matches the normalized index tokens.
+  const language = db.tokenizer?.language ?? "";
+  const normalizedTerm = CYRILLIC_NORMALIZE_LANGUAGES.has(language)
+    ? normalizeCyrillic(term)
+    : term;
   const params = {
     boost: BOOST,
     limit,
     properties: ["title", "description", "content"],
-    term,
+    term: normalizedTerm,
     ...(Object.keys(where).length > 0 ? { where } : {}),
   };
   const bigrammed = BIGRAM_LANGUAGES.has(db.tokenizer?.language ?? "");

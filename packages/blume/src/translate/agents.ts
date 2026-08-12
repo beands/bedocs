@@ -4,9 +4,9 @@ import { DISALLOWED_TOOLS } from "../eval/agents.ts";
 /**
  * argv builders for the translator role. The subprocess machinery
  * (`runAgentHeadless`, `readAgentOutput`, the `HeadlessRunner` test seam) is
- * shared with `blume eval` — only the argument surface differs: a translator
+ * shared with `bedocs eval` — only the argument surface differs: a translator
  * is a pure text→text call with no MCP servers and no tools at all, so the
- * agent can neither read the repo nor write files (Blume owns every write).
+ * agent can neither read the repo nor write files (BeDocs owns every write).
  */
 
 /**

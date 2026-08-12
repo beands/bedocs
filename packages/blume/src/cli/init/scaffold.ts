@@ -3,9 +3,18 @@ import { mkdir, writeFile } from "node:fs/promises";
 
 import { basename, dirname, isAbsolute, join, relative } from "pathe";
 
-import { blumePackageJson, toPackageName } from "../../core/package-json.ts";
+import { bedocsPackageJson, toPackageName } from "../../core/package-json.ts";
 
-export const TEMPLATES = ["docs", "api", "sdk", "changelog"] as const;
+export const TEMPLATES = [
+  "docs",
+  "api",
+  "sdk",
+  "changelog",
+  "synthix",
+  "taskcraft",
+  "beandsbooker",
+  "universal",
+] as const;
 export type Template = (typeof TEMPLATES)[number];
 
 export const PACKAGE_MANAGERS = ["npm", "pnpm", "yarn", "bun"] as const;
@@ -61,8 +70,8 @@ export const STARTERS: Record<Template, Starter> = {
     route: "/api",
     sources: [
       {
-        label: "Petstore",
-        spec: "https://petstore3.swagger.io/api/v3/openapi.json",
+        label: "BeDocs API",
+        spec: "https://bedocs.com/api/v3/openapi.json",
       },
     ],
   },`,
@@ -70,8 +79,8 @@ export const STARTERS: Record<Template, Starter> = {
       {
         content: page(
           "API Reference",
-          "Explore the API.",
-          "# API Reference\n\nYour OpenAPI spec renders at [`/api`](/api). Point `openapi.sources` at your own spec in `blume.config.ts`."
+          "Explore the BeDocs API.",
+          "# API Reference\n\nYour OpenAPI specification is displayed on [`/api`](/api). Specify your specification in `openapi.sources` in `bedocs.config.ts`."
         ),
         path: join(dir, "index.mdx"),
       },
@@ -89,8 +98,8 @@ export const STARTERS: Record<Template, Starter> = {
       {
         content: page(
           "Introduction",
-          "Welcome to your new Blume docs.",
-          "# Introduction\n\nWrite your docs here, and log releases under `changelog/`."
+          "Welcome to your new BeDocs documentation.",
+          "# Introduction\n\nWrite your documentation here, and release notes in the `changelog/` folder."
         ),
         path: join(dir, "index.mdx"),
       },
@@ -106,8 +115,8 @@ export const STARTERS: Record<Template, Starter> = {
       {
         content: page(
           "Introduction",
-          "Welcome to your new Blume docs.",
-          `# Introduction\n\nWelcome to **Blume** — markdown-first docs powered by Astro and Vite.\n\nEdit \`${dir}/index.mdx\` to get started, then run \`blume dev\`.`
+          "Welcome to your new BeDocs documentation.",
+          `# Introduction\n\nWelcome to **BeDocs** — a documentation platform based on Astro and Vite.\n\nEdit \`${dir}/index.mdx\` to get started, then run \`bedocs dev\`.`
         ),
         path: join(dir, "index.mdx"),
       },
@@ -119,7 +128,7 @@ export const STARTERS: Record<Template, Starter> = {
       {
         content: page(
           "Introduction",
-          "Get started with the SDK.",
+          "Get started with the BeDocs SDK.",
           "# Introduction\n\nInstall the SDK and make your first call. See [Installation](/installation)."
         ),
         path: join(dir, "index.mdx"),
@@ -127,10 +136,133 @@ export const STARTERS: Record<Template, Starter> = {
       {
         content: page(
           "Installation",
-          "Install the SDK.",
-          "# Installation\n\n```package-install\nyour-sdk\n```"
+          "Установка SDK.",
+          "# Установка\n\n```package-install\nyour-sdk\n```"
         ),
         path: join(dir, "installation.mdx"),
+      },
+    ],
+  },
+  synthix: {
+    configExtra: `
+  theme: {
+    accent: "purple",
+    fonts: {
+      body: "space-grotesk",
+      display: "space-grotesk",
+      mono: "jetbrains-mono",
+    },
+  },
+  navigation: {
+    tabs: [
+      { label: "Документация", path: "/" },
+      { label: "API", path: "/api" },
+    ],
+  },`,
+    files: (dir) => [
+      {
+        content: page(
+          "Synthix",
+          "Документация платформы Synthix.",
+          "# Synthix\n\n**Synthix** — платформа для синтеза аудио с помощью ИИ.\n\n## Возможности\n\n- Генерация аудио по текстовому описанию\n- Вокальный синтез\n- REST API и WebSocket\n\n## Начало работы\n\nИзучите [руководство по установке](/installation) или [API-справочник](/api)."
+        ),
+        path: join(dir, "index.mdx"),
+      },
+      {
+        content: page(
+          "Установка",
+          "Установка и настройка Synthix SDK.",
+          "# Установка\n\n```package-install\n@synthix/sdk\n```\n\n## Быстрый старт\n\n```ts\nimport { Synthix } from \"@synthix/sdk\";\n\nconst client = new Synthix({ apiKey: process.env.SYNTHIX_API_KEY });\n```"
+        ),
+        path: join(dir, "installation.mdx"),
+      },
+    ],
+  },
+  taskcraft: {
+    configExtra: `
+  theme: {
+    accent: "teal",
+    fonts: {
+      body: "inter",
+      display: "inter-tight",
+      mono: "fira-code",
+    },
+  },
+  navigation: {
+    tabs: [
+      { label: "Руководства", path: "/" },
+      { label: "API", path: "/api" },
+      { label: "Changelog", path: "/changelog" },
+    ],
+  },`,
+    files: (dir) => [
+      {
+        content: page(
+          "Taskcraft",
+          "Документация системы управления задачами Taskcraft.",
+          "# Taskcraft\n\n**Taskcraft** — система управления задачами и проектами для команд.\n\n## Возможности\n\n- Канбан-доски и спринты\n- Временные трекеры\n- REST API и вебхуки\n\n## Начало работы\n\nПрочитайте [руководство по началу работы](/getting-started)."
+        ),
+        path: join(dir, "index.mdx"),
+      },
+      {
+        content: page(
+          "Начало работы",
+          "Быстрый старт с Taskcraft API.",
+          "# Начало работы\n\n## Получение API-ключа\n\n1. Зарегистрируйтесь на [taskcraft.ru](https://taskcraft.ru)\n2. Перейдите в **Настройки → API**\n3. Создайте новый ключ\n\n## Установка\n\n```package-install\n@taskcraft/sdk\n```"
+        ),
+        path: join(dir, "getting-started.mdx"),
+      },
+      {
+        content: `---\ntitle: v1.0.0\ntype: changelog\ndate: 2026-01-01\n---\n\nПервый релиз Taskcraft. Редактируйте \`${dir}/changelog/v1-0-0.mdx\` или добавляйте новые записи рядом.\n`,
+        path: join(dir, "changelog", "v1-0-0.mdx"),
+      },
+    ],
+  },
+  beandsbooker: {
+    configExtra: `
+  theme: {
+    accent: "orange",
+    fonts: {
+      body: "manrope",
+      display: "playfair-display",
+      mono: "ibm-plex-mono",
+    },
+  },
+  navigation: {
+    tabs: [
+      { label: "Документация", path: "/" },
+      { label: "API", path: "/api" },
+    ],
+  },`,
+    files: (dir) => [
+      {
+        content: page(
+          "BeandsBooker",
+          "Документация сервиса бронирования BeandsBooker.",
+          "# BeandsBooker\n\n**BeandsBooker** — сервис онлайн-бронирования для малого бизнеса.\n\n## Возможности\n\n- Онлайн-запись клиентов\n- Управление расписанием\n- REST API для интеграции\n\n## Начало работы\n\nИзучите [API-справочник](/api) или [руководство по интеграции](/integration)."
+        ),
+        path: join(dir, "index.mdx"),
+      },
+      {
+        content: page(
+          "Интеграция",
+          "Интеграция BeandsBooker в ваш сайт.",
+          "# Интеграция\n\n## Виджет записи\n\nВставьте виджет на любую страницу:\n\n```html\n<script src=\"https://cdn.beandsbooker.ru/widget.js\" data-business=\"your-id\"></script>\n```\n\n## REST API\n\nБазовый URL: `https://api.beandsbooker.ru/v1`"
+        ),
+        path: join(dir, "integration.mdx"),
+      },
+    ],
+  },
+  universal: {
+    configExtra: "",
+    files: (dir) => [
+      {
+        content: page(
+          "Документация",
+          "Универсальный шаблон документации BeDocs.",
+          "# Добро пожаловать\n\nЭто универсальный шаблон **BeDocs** — подходит для любого типа документации.\n\n## Возможности\n\n- Markdown и MDX\n- Локальный поиск\n- Темная и светлая темы\n- i18n с русским по умолчанию\n\n## Начало работы\n\nОтредактируйте `index.mdx` и запустите `bedocs dev`."
+        ),
+        path: join(dir, "index.mdx"),
       },
     ],
   },
@@ -138,8 +270,8 @@ export const STARTERS: Record<Template, Starter> = {
 
 /**
  * Install + dev commands to print for the chosen package manager, plus the
- * prefix that runs a locally installed bin (`exec`, e.g. `npx blume eject`) —
- * dependency bins aren't on PATH, so a bare `blume …` hint would not run.
+ * prefix that runs a locally installed bin (`exec`, e.g. `npx bedocs eject`) —
+ * dependency bins aren't on PATH, so a bare `bedocs …` hint would not run.
  */
 export const commandsFor = (
   pm: PackageManager
@@ -260,14 +392,14 @@ ${entries.join("\n")}
   },`;
 };
 
-/** The full `blume.config.ts` text for the chosen answers. */
+/** The full `bedocs.config.ts` text for the chosen answers. */
 export const buildConfig = (
   answers: InitAnswers
-): string => `import { defineConfig } from "blume";
+): string => `import { defineConfig } from "@beands/bedocs";
 
 export default defineConfig({
   title: ${JSON.stringify(answers.title)},
-  description: "Documentation powered by Blume.",${STARTERS[answers.template].configExtra}${contentBlockFor(answers)}
+  description: "Документация на базе BeDocs.",${STARTERS[answers.template].configExtra}${contentBlockFor(answers)}
 });
 `;
 
@@ -284,13 +416,13 @@ export const buildPlan = (
 ): ScaffoldFile[] => {
   const files: ScaffoldFile[] = [
     {
-      content: blumePackageJson(
+      content: bedocsPackageJson(
         toPackageName(basename(root)),
         extraDepsFor(answers.sources)
       ),
       path: join(root, "package.json"),
     },
-    { content: buildConfig(answers), path: join(root, "blume.config.ts") },
+    { content: buildConfig(answers), path: join(root, "bedocs.config.ts") },
   ];
   // Seed pages only make sense when a local filesystem source will read them.
   if (answers.sources.length === 0 || answers.sources.includes("filesystem")) {
@@ -361,7 +493,7 @@ export const nextSteps = (
   const envVars = envVarsFor(answers.sources);
   const auth =
     envVars.length > 0
-      ? `\nSet ${envVars.join(" and ")} in .env.local so your sources can authenticate.\n`
+      ? `\nУстановите ${envVars.join(" и ")} в .env.local для аутентификации источников.\n`
       : "";
-  return `Next steps:\n\n  ${lines.join("\n  ")}\n${auth}`;
+  return `Следующие шаги:\n\n  ${lines.join("\n  ")}\n${auth}`;
 };

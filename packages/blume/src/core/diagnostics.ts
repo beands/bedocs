@@ -19,7 +19,7 @@ export const createDiagnostic = (diagnostic: Diagnostic): Diagnostic =>
   diagnostic;
 
 /** Docs site base; diagnostic help links resolve against it. */
-const DOCS_BASE = "https://useblume.dev";
+const DOCS_BASE = "https://docs.beandsmedia.ru";
 
 const DOCS_DEPLOYMENT = "/docs/deployment";
 const DOCS_REFERENCE_CLI = "/docs/reference/cli";
@@ -155,7 +155,7 @@ export const locateFrontmatterKey = (
 
 /**
  * Convert generic validation issues (message + path, the shape shared by Zod
- * and Standard Schema issues) into Blume diagnostics, anchored to a file.
+ * and Standard Schema issues) into BeDocs diagnostics, anchored to a file.
  */
 export const diagnosticsFromIssues = (
   issues: readonly {
@@ -180,7 +180,7 @@ export const diagnosticsFromIssues = (
     } satisfies Diagnostic;
   });
 
-/** Convert a ZodError into Blume diagnostics, anchored to a file. */
+/** Convert a ZodError into BeDocs diagnostics, anchored to a file. */
 export const diagnosticsFromZod = (
   error: ZodError,
   options: { code: string; file?: string; source?: string }

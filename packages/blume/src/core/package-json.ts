@@ -1,4 +1,5 @@
 import { getBlumeVersion } from "./version.ts";
+import { productMeta } from "./product-meta.ts";
 
 /**
  * Derive a valid npm package name from a directory name, falling back to
@@ -11,18 +12,19 @@ export const toPackageName = (raw: string): string =>
     .replaceAll(/^[-_.]+|[-_.]+$/gu, "") || "docs";
 
 /**
- * A minimal, runnable `package.json` body for a Blume project: the `blume`
+ * A minimal, runnable `package.json` body for a BeDocs project: the
+ * `@beands/bedocs`
  * dependency pinned to the installed version plus `dev`/`build`/`doctor`
  * scripts, so `npm install && npm run dev` works immediately. Shared by
- * `blume init` and the migrators, which scaffold one when a project has none.
- * `extraDeps` adds source SDKs (e.g. `@notionhq/client`) beside `blume`.
+ * `bedocs init` and the migrators, which scaffold one when a project has none.
+ * `extraDeps` adds source SDKs (e.g. `@notionhq/client`) beside `@beands/bedocs`.
  */
-export const blumePackageJson = (
+export const bedocsPackageJson = (
   name: string,
   extraDeps: Record<string, string> = {}
 ): string => {
   const dependencies = Object.entries({
-    blume: `^${getBlumeVersion()}`,
+    [productMeta.packageName]: `^${getBlumeVersion()}`,
     ...extraDeps,
   })
     .toSorted(([a], [b]) => (a < b ? -1 : 1))
@@ -35,9 +37,9 @@ export const blumePackageJson = (
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "blume dev",
-    "build": "blume build",
-    "doctor": "blume doctor"
+    "dev": "bedocs dev",
+    "build": "bedocs build",
+    "doctor": "bedocs doctor"
   },
   "dependencies": {
 ${dependencies}

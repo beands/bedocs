@@ -5,12 +5,12 @@ import type {
 } from "@scalar/openapi-types/3.1";
 
 /**
- * Blume's own OpenAPI model. Specs are parsed and upgraded to 3.1 (see
+ * BeDocs's own OpenAPI model. Specs are parsed and upgraded to 3.1 (see
  * `parse.ts`) with internal `$ref`s left intact — the document stays
  * JSON-serializable (a fully dereferenced graph can be circular), and the schema
  * components resolve refs against `document.components.schemas` at render time.
  * Each operation is flattened into an {@link ApiOperationRef} with a real,
- * per-operation route so it becomes a first-class Blume page.
+ * per-operation route so it becomes a first-class BeDocs page.
  */
 
 /** A normalized OpenAPI 3.1 document, internal `$ref`s intact. */

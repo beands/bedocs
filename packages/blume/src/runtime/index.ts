@@ -1,7 +1,7 @@
 /**
  * Runtime helpers usable inside `.astro` pages and islands.
  *
- * These give custom pages and components access to Blume project data
+ * These give custom pages and components access to BeDocs project data
  * (config, navigation, page collections) without reaching into generated
  * runtime internals. The surface grows with the customization milestone.
  */

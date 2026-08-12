@@ -9,7 +9,7 @@ import { dirname, join, resolve } from "pathe";
  * islands, and components resolve in the generated Astro build exactly as they
  * do in the user's own tooling.
  *
- * The generated `.blume/` runtime is its own Astro project with its own tsconfig
+ * The generated `.bedocs/` runtime is its own Astro project with its own tsconfig
  * and never inherits the project's, so without this every shadcn-style `@/…`
  * import would have to be rewritten to a relative path. Reading the aliases here
  * lets those components port over unchanged.

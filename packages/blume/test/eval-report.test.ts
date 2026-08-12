@@ -144,7 +144,7 @@ describe("questionLine and summaryLine", () => {
 describe("progress lines", () => {
   it("announces the run and each question as it starts", () => {
     expect(strip(headerLine(4, "claude"))).toBe(
-      "blume eval  4 question(s) · Claude Code"
+      "bedocs eval  4 question(s) · Claude Code"
     );
     expect(strip(startLine("deploy-vercel", 1, 4))).toBe(
       "  ▸ deploy-vercel (2/4)"
@@ -162,7 +162,7 @@ describe("progress lines", () => {
 describe("formatEvalReport", () => {
   it("lists every question, missing facts, and the fix lines", () => {
     const report = strip(formatEvalReport(result, "/root"));
-    expect(report).toContain("blume eval  4 question(s) · Claude Code");
+    expect(report).toContain("bedocs eval  4 question(s) · Claude Code");
     expect(report).toContain("install-node-version");
     expect(report).toContain("missing: the adapter is auto-detected");
     expect(report).toContain("reader timed out");

@@ -14,7 +14,7 @@ import { MCP_TOOLS } from "./tools.ts";
 /**
  * The low-level SDK `Server` is used (rather than the high-level `McpServer`)
  * because the latter's `registerTool` is generic over the caller's Zod instance;
- * Blume's zod and the SDK's may resolve to different copies, whose types don't
+ * BeDocs's zod and the SDK's may resolve to different copies, whose types don't
  * unify. Hand-written JSON Schema and the SDK's own request schemas avoid that
  * entirely.
  */
@@ -213,7 +213,7 @@ export const createIndexProvider = (
   };
 };
 
-/** Construct a fresh MCP server with Blume's read-only docs tools registered. */
+/** Construct a fresh MCP server with BeDocs's read-only docs tools registered. */
 export const buildServer = (
   data: McpData,
   index: OramaIndexProvider

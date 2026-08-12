@@ -1,9 +1,9 @@
 /**
  * CSS for Twoslash's rich renderer, emitted into the Tailwind entry (Twoslash
  * runs on any fence with the `twoslash` meta). It is the shipped
- * `@shikijs/twoslash` stylesheet plus a Blume-themed override layer:
+ * `@shikijs/twoslash` stylesheet plus a BeDocs-themed override layer:
  *
- * - maps the renderer's `--twoslash-*` variables onto Blume tokens so popups
+ * - maps the renderer's `--twoslash-*` variables onto BeDocs tokens so popups
  *   match the active theme (light/dark);
  * - lets popups escape the code block's horizontal scroll container; and
  * - restores backgrounds the theme's `pre.astro-code span { background:
@@ -15,9 +15,9 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 
-/** Blume-token theming layered over the shipped rich renderer styles. */
+/** BeDocs-token theming layered over the shipped rich renderer styles. */
 const OVERRIDES = `
-/* Twoslash: theme the rich renderer with Blume tokens. */
+/* Twoslash: theme the rich renderer with BeDocs tokens. */
 :root {
   --twoslash-border-color: var(--blume-border);
   --twoslash-popup-bg: var(--blume-code-background);
@@ -89,7 +89,7 @@ const OVERRIDES = `
 }
 `;
 
-/** The full Twoslash stylesheet (shipped rich styles + Blume overrides). */
+/** The full Twoslash stylesheet (shipped rich styles + BeDocs overrides). */
 export const twoslashCss = (): string => {
   const file = require.resolve("@shikijs/twoslash/style-rich.css");
   return `${readFileSync(file, "utf-8")}\n${OVERRIDES}`;

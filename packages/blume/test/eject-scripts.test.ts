@@ -33,13 +33,13 @@ const config = (raw: Record<string, unknown> = {}): ResolvedConfig =>
   blumeConfigSchema.parse(raw);
 
 describe("updatePackageScripts", () => {
-  it("rewrites the Blume scripts to run Astro directly", async () => {
+  it("rewrites the BeDocs scripts to run Astro directly", async () => {
     const root = await makeRoot();
     await writeFile(
       join(root, "package.json"),
       JSON.stringify({
         name: "docs",
-        scripts: { build: "blume build", dev: "blume dev" },
+        scripts: { build: "bedocs build", dev: "bedocs dev" },
       })
     );
     await updatePackageScripts(root);
@@ -58,7 +58,7 @@ describe("updatePackageScripts", () => {
       JSON.stringify({
         dependencies: { blume: "^1.0.0" },
         name: "docs",
-        scripts: { dev: "blume dev", lint: "eslint ." },
+        scripts: { dev: "bedocs dev", lint: "eslint ." },
       })
     );
     await updatePackageScripts(root);

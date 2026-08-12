@@ -101,7 +101,7 @@ export const summaryLine = (result: EvalResult): string => {
 
 /** The header line the command prints before the first question runs. */
 export const headerLine = (total: number, agent: EvalResult["agent"]): string =>
-  `${colors.bold("blume eval")}  ${total} question(s) · ${AGENTS[agent].name}`;
+  `${colors.bold("bedocs eval")}  ${total} question(s) · ${AGENTS[agent].name}`;
 
 /** The dim announce line while a question's agents run. */
 export const startLine = (id: string, index: number, total: number): string =>
@@ -158,7 +158,7 @@ export const formatEvalReport = (
 
 /**
  * The machine-readable report. The `diagnostics` + `summary` shape matches
- * `blume validate --json` and `blume audit --json` exactly — anything parsing
+ * `bedocs validate --json` and `bedocs audit --json` exactly — anything parsing
  * those keeps working — with the eval run's own results alongside.
  */
 export const evalReportJson = (

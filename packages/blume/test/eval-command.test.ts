@@ -122,13 +122,13 @@ const run = async (
   return { exitCode, stderr, stdout };
 };
 
-describe("blume eval", () => {
+describe("bedocs eval", () => {
   it("passes a healthy run and prints per-question progress", async () => {
     const root = await fixture();
     const bin = await fakeClaude(root);
     const { exitCode, stderr } = await run(root, bin, {});
     expect(exitCode).toBe(0);
-    expect(stderr).toContain("blume eval");
+    expect(stderr).toContain("bedocs eval");
     expect(stderr).toContain("install-node-version");
     expect(stderr).toContain("1 passed");
   });
@@ -191,7 +191,7 @@ describe("blume eval", () => {
       join(root, "interactive-prompt.txt"),
       "utf-8"
     );
-    expect(prompt).toContain("blume eval");
+    expect(prompt).toContain("bedocs eval");
     expect(prompt).toContain("report.json");
   });
 
@@ -204,7 +204,7 @@ describe("blume eval", () => {
     const { exitCode, stderr } = await run(root, bin, {});
     expect(exitCode).toBe(1);
     expect(stderr).toContain("No evals file found");
-    expect(stderr).toContain("blume eval init");
+    expect(stderr).toContain("bedocs eval init");
   });
 
   it("rejects bad flags", async () => {
@@ -237,7 +237,7 @@ describe("blume eval", () => {
   });
 });
 
-describe("blume eval init", () => {
+describe("bedocs eval init", () => {
   it("refuses to overwrite an existing evals file", async () => {
     const root = await fixture();
     const bin = await fakeClaude(root);

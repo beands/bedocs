@@ -49,7 +49,7 @@ import {
   siYaml,
 } from "simple-icons";
 
-/** The slice of a `simple-icons` icon Blume reads (the SVG path data). */
+/** The slice of a `simple-icons` icon BeDocs reads (the SVG path data). */
 interface SimpleIcon {
   path: string;
 }

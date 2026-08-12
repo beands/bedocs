@@ -16,9 +16,9 @@ import { operationMdx, overviewMdx } from "./render-mdx.ts";
 import type { RenderedPage } from "./render-mdx.ts";
 
 /**
- * The staged content source behind Blume's own OpenAPI renderer. Each configured
+ * The staged content source behind BeDocs's own OpenAPI renderer. Each configured
  * spec is parsed once here, then lowered into one MDX page per operation plus an
- * overview page — so operations become first-class Blume pages (real routes,
+ * overview page — so operations become first-class BeDocs pages (real routes,
  * sidebar, search, i18n, OG) and the parsed documents are handed to the
  * generated `blume:openapi` module for the UI components to render.
  */

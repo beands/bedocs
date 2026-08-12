@@ -1,6 +1,7 @@
 import { defineCommand, runMain } from "citty";
 
 import { getBlumeVersion } from "../core/version.ts";
+import { productMeta } from "../core/product-meta.ts";
 import { addCommand } from "./commands/add.ts";
 import { auditCommand } from "./commands/audit.ts";
 import { buildCommand } from "./commands/build.ts";
@@ -20,8 +21,8 @@ import { reportInternalError } from "./internal-error.ts";
 
 const main = defineCommand({
   meta: {
-    description: "Markdown-first documentation powered by Astro and Vite.",
-    name: "blume",
+    description: "Русскоязычная платформа документации на базе Astro и Vite.",
+    name: productMeta.cliName,
     version: getBlumeVersion(),
   },
   subCommands: {
@@ -47,7 +48,7 @@ const main = defineCommand({
 loadEnvFiles(process.cwd());
 
 // Backstop for unexpected async failures that escape a command's own handling
-// (e.g. a rejected timer/watcher in `blume dev`), so even those report through
+// (e.g. a rejected timer/watcher in `bedocs dev`), so even those report through
 // the stable internal-error contract rather than a bare stack trace.
 process.on("uncaughtException", (error) => {
   reportInternalError(error);

@@ -49,7 +49,7 @@ const validate = async (
   return { exitCode, stderr };
 };
 
-describe("blume validate --strict", () => {
+describe("bedocs validate --strict", () => {
   it("does not fail on info-level diagnostics", async () => {
     // An asset link with no public/ dir yields only the info-severity
     // BLUME_ASSETS_UNCHECKED note — documented strict behavior is "treat
@@ -77,7 +77,7 @@ describe("blume validate --strict", () => {
   });
 });
 
-describe("blume validate — routes beyond the content graph", () => {
+describe("bedocs validate — routes beyond the content graph", () => {
   it("accepts links to custom .astro pages", async () => {
     // `pages/index.astro` serves `/`; a docs link to it must not fail CI as
     // BLUME_BROKEN_LINK just because the graph only knows content routes.

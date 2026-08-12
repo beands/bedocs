@@ -1,11 +1,11 @@
 /**
  * Send a custom analytics event to every analytics platform configured in
- * `blume.config.ts`. Mirrors the providers wired by `Analytics.astro`: Vercel
+ * `bedocs.config.ts`. Mirrors the providers wired by `Analytics.astro`: Vercel
  * Web Analytics and PostHog are first-class; any other provider added through
  * `analytics.scripts` is reached via best-effort global detection or the
  * `blume:track` CustomEvent, which fires unconditionally so a project can bridge
  * the event to anything. Every call no-ops cleanly when a provider isn't present
- * — for example during `blume dev`, where `Analytics.astro` injects nothing.
+ * — for example during `bedocs dev`, where `Analytics.astro` injects nothing.
  */
 import { track as vercelTrack } from "@vercel/analytics";
 

@@ -3,7 +3,7 @@ import { join } from "pathe";
 /**
  * Build a local Pagefind search index over the built site. Pagefind indexes
  * every rendered page except those whose `<html>` carries
- * `data-pagefind-ignore`, which Blume stamps on non-indexable pages
+ * `data-pagefind-ignore`, which BeDocs stamps on non-indexable pages
  * (search-excluded, or hidden without the opt-in), so those stay out.
  *
  * Returns the number of pages indexed.

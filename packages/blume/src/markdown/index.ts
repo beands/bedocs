@@ -193,7 +193,7 @@ export const highlightCode = async (
 };
 
 /**
- * Sätteri Markdown features Blume enables beyond Astro's defaults. GFM,
+ * Sätteri Markdown features BeDocs enables beyond Astro's defaults. GFM,
  * frontmatter, and smart punctuation are already on; this adds superscript
  * (`^text^`) and subscript (`~text~`), which render to native `<sup>`/`<sub>`.
  */

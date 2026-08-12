@@ -24,12 +24,12 @@ export interface PrepareOptions {
   refresh?: boolean;
   /** CLI config overrides (e.g. `--output`, `--content-dir`). */
   overrides?: ConfigOverrides;
-  /** Relocate the generated runtime (e.g. `.blume-verify` for `--isolated`). */
+  /** Relocate the generated runtime (e.g. `.bedocs-verify` for `--isolated`). */
   runtimeDir?: string;
 }
 
 /**
- * Scan the project, surface diagnostics, and (re)generate the `.blume` runtime.
+ * Scan the project, surface diagnostics, and (re)generate the `.bedocs` runtime.
  * In strict mode, any error aborts. Returns the resolved project.
  */
 export const prepareProject = async (
@@ -73,7 +73,7 @@ export const prepareProject = async (
             message: `${features.join(", ")} require server output, but deployment.output is "static".`,
             severity: "error",
             suggestion:
-              'Set deployment: { output: "server", adapter: "vercel" } in blume.config.ts.',
+              'Set deployment: { output: "server", adapter: "vercel" } in bedocs.config.ts.',
           },
         ],
         options.root

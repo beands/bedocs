@@ -63,7 +63,7 @@ export const devCommand = defineCommand({
     strict: { description: "Fail on diagnostics.", type: "boolean" },
   },
   meta: {
-    description: "Start the Blume development server.",
+    description: "Запустить локальный сервер разработки.",
     name: "dev",
   },
   async run({ args }) {
@@ -79,12 +79,12 @@ export const devCommand = defineCommand({
     const port = explicitPort ?? 4321;
     let devServerUrl = `http://localhost:${port}`;
 
-    // Claim the shared `.blume` dir BEFORE preparing: `prepareProject`
+    // Claim the shared `.bedocs` dir BEFORE preparing: `prepareProject`
     // regenerates the runtime, so even a refused second dev server would
     // otherwise clobber the running one's generated tree (with this
     // invocation's port baked in) on its way out. The claim is atomic, so two
     // simultaneous starts can't both win. Dev never relocates the runtime dir,
-    // so the lock always lives at `<root>/.blume`.
+    // so the lock always lives at `<root>/.bedocs`.
     const outDir = resolveRuntimeDir(root);
     let releaseLock: () => void;
     try {
@@ -92,7 +92,7 @@ export const devCommand = defineCommand({
     } catch (error) {
       if (error instanceof DevLockHeldError) {
         logger.error(
-          `A \`blume dev\` server is already running${describeDevLock(error.lock)} in this project. Reuse that server instead of starting a second one — two dev servers would corrupt the shared .blume dir. If it crashed, delete .blume/dev.lock.`
+          `A \`bedocs dev\` server is already running${describeDevLock(error.lock)} in this project. Reuse that server instead of starting a second one — two dev servers would corrupt the shared .bedocs dir. If it crashed, delete .bedocs/dev.lock.`
         );
         process.exit(1);
       }
@@ -141,7 +141,7 @@ export const devCommand = defineCommand({
 
     // Watch user inputs and regenerate the runtime data on change. A body edit
     // hot-reloads via Vite (fast path). A route-set change instead forces a cold
-    // server restart: Astro's in-place content sync never re-globs on a Blume
+    // server restart: Astro's in-place content sync never re-globs on a BeDocs
     // route change (it strips `integrations` from its cache digest) and its glob
     // watcher misses directory renames, so a renamed page 404s (`getEntry` reads
     // a stale in-memory store) until the server is restarted. We restart it

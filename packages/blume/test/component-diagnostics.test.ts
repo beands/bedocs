@@ -51,7 +51,7 @@ describe("validateUsedComponents", () => {
       new Set(),
       new Set(["pagination"])
     );
-    expect(result[0]?.suggestion).toContain("blume add pagination");
+    expect(result[0]?.suggestion).toContain("bedocs add pagination");
   });
 
   it("dedupes a repeated unknown tag across pages", () => {

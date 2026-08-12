@@ -112,7 +112,7 @@ const enumerateGithub = async (
 /**
  * Remote Markdown/MDX content source. Fetches raw `.md`/`.mdx` over HTTP and
  * passes the text straight through `normalizeEntry`. A snapshot under
- * `.blume/cache/<source>/` makes rebuilds offline-tolerant.
+ * `.bedocs/cache/<source>/` makes rebuilds offline-tolerant.
  */
 export const mdxRemoteSource = (
   options: MdxRemoteSourceOptions,

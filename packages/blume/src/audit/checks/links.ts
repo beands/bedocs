@@ -43,7 +43,7 @@ const redirectFrom = (context: AuditContext, path: string) =>
 /**
  * Internal links, and what they land on.
  *
- * Broken *chrome* links are deduplicated by target: Blume renders the sidebar on
+ * Broken *chrome* links are deduplicated by target: BeDocs renders the sidebar on
  * every page, so one bad nav entry would otherwise be reported once per page —
  * hundreds of findings for a single typo. Body links are reported per
  * occurrence, because each one lives in a different `.mdx` a reader can go fix.

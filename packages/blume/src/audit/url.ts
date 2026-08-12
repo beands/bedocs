@@ -54,7 +54,7 @@ export const siteOrigin = (site?: string): string | null => {
  * `deployBase` is the normalized `deployment.base`: emitted hrefs carry it, but
  * the built file tree (and so every page URL and file-index key) does not, so it
  * is stripped here to keep resolved paths comparable. `basePath` is different —
- * Blume mounts it as a real directory in the build, so it stays.
+ * BeDocs mounts it as a real directory in the build, so it stays.
  */
 export const resolveHref = (
   pageUrl: string,

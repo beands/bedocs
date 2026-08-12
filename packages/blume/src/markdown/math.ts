@@ -6,9 +6,9 @@ interface MathNode extends MdastNode {
 }
 
 /**
- * Satteri MDAST plugin that turns math nodes into Blume's `<Math>` component,
+ * Satteri MDAST plugin that turns math nodes into BeDocs's `<Math>` component,
  * which renders them with KaTeX at build time. Block math (`$$…$$`) becomes a
- * block element. Blume runs the parser block-only (`singleDollarTextMath:
+ * block element. BeDocs runs the parser block-only (`singleDollarTextMath:
  * false`), so a bare `$` stays literal and no `inlineMath` nodes are produced;
  * the `inlineMath` visitor remains as a harmless safety net.
  */

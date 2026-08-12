@@ -51,7 +51,7 @@ const truncate = (text: string): string =>
 
 /**
  * The card's identity in the schema's reverse-DNS `namespace/server` form:
- * the site hostname reversed (`useblume.dev` → `dev.useblume`), or
+ * the site hostname reversed (`docs.beandsmedia.ru` → `ru.beandsmedia.docs`), or
  * `localhost` when no site is configured, plus the slugged display name.
  */
 const reverseDnsName = (input: McpDiscoveryInput): string => {
@@ -77,7 +77,7 @@ const HTTP_URL = /^https?:\/\//u;
  * `remotes` — which the schema requires to be absolute, so it appears only
  * when a `site` is configured). Alongside it ride initialize-shaped compat
  * fields (`serverInfo`, `capabilities`, `transports`) for scanners built
- * against the SEP's earlier revision, plus Blume's advertised tool set —
+ * against the SEP's earlier revision, plus BeDocs's advertised tool set —
  * schema-legal extras (`additionalProperties` is open), and the tool list is
  * genuinely static for a docs server, unlike the dynamic servers the spec
  * excludes primitives for. Full input schemas are served live via

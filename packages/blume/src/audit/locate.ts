@@ -8,7 +8,7 @@ import type { AuditContext, PageSnapshot } from "./types.ts";
  * to edit.
  *
  * This is the feature. A crawler can only tell you that `/docs/api` has no
- * description; Blume knows the page was built from `docs/api.mdx` and can put
+ * description; BeDocs knows the page was built from `docs/api.mdx` and can put
  * the cursor on the line. Pass the front matter key path a fix would touch
  * (`["description"]`, `["seo", "canonical"]`); omit it when the key doesn't
  * exist yet, and the finding anchors to the file instead.

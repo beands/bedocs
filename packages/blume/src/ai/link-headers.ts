@@ -4,7 +4,7 @@ import { API_CATALOG_PATH, hasApiCatalog } from "./api-catalog.ts";
 
 /**
  * The homepage `Link` response header (RFC 8288) — agent discovery for the
- * machine-readable surface Blume already publishes. Agents probing a site read
+ * machine-readable surface BeDocs already publishes. Agents probing a site read
  * this header off `GET /` to find the resources without scraping HTML:
  * `agent-readability.json` and `llms.txt` as `rel="describedby"`, and the
  * homepage's raw-Markdown mirror as `rel="alternate"` (only when the home

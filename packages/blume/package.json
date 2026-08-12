@@ -1,7 +1,7 @@
 {
-  "name": "blume",
-  "version": "1.4.1",
-  "description": "Documentation that's fast, AI-ready, and zero-config.",
+  "name": "@beands/bedocs",
+  "version": "1.0.0",
+  "description": "Русскоязычная платформа документации на базе Astro и Vite.",
   "keywords": [
     "astro",
     "docs",
@@ -10,19 +10,19 @@
     "mdx",
     "vite"
   ],
-  "homepage": "https://github.com/haydenbleasel/blume#readme",
+  "homepage": "https://github.com/beandsmedia/bedocs#readme",
   "bugs": {
-    "url": "https://github.com/haydenbleasel/blume/issues"
+    "url": "https://github.com/beandsmedia/bedocs/issues"
   },
   "license": "MIT",
-  "author": "Hayden Bleasel",
+  "author": "BeandsMedia",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/haydenbleasel/blume.git",
+    "url": "git+https://github.com/beandsmedia/bedocs.git",
     "directory": "packages/blume"
   },
   "bin": {
-    "blume": "bin/blume.mjs"
+    "bedocs": "bin/bedocs.mjs"
   },
   "files": [
     "dist",

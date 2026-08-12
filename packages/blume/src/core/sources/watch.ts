@@ -13,21 +13,21 @@ import type { WatchListener } from "node:fs";
  * defaults to `docs/` where this rarely bites, but any wider root hits it.
  *
  * The watcher needs them because a recursive `fs.watch` rooted at the project
- * also sees Blume's own `.blume/` output, which the dev server rewrites on every
- * render (e.g. `.blume/.astro/data-store.json`). Left unfiltered, each such write
+ * also sees BeDocs's own `.bedocs/` output, which the dev server rewrites on every
+ * render (e.g. `.bedocs/.astro/data-store.json`). Left unfiltered, each such write
  * re-triggers a rescan + runtime regeneration whose writes land back under
- * `.blume/` and fire the watcher again: a self-sustaining loop that stalls page
+ * `.bedocs/` and fire the watcher again: a self-sustaining loop that stalls page
  * renders and floods the console (and, mid-render, corrupts Astro's dev module
  * graph so `astro:server-app.js` fails to load). `fs.watch` has no ignore
  * option, so we filter by the changed path in the callback.
  */
 export const BLUME_IGNORE_DIRS = [
-  ".blume",
-  // The isolated `blume check --isolated` runtime. A sibling of `.blume`, it is
+  ".bedocs",
+  // The isolated `bedocs check --isolated` runtime. A sibling of `.bedocs`, it is
   // written while a dev server runs; without this the content-layer watcher (or
   // a `.`-rooted fs.watch) would treat its generation as a content change and
   // reload — the very thing `--isolated` promises not to do.
-  ".blume-verify",
+  ".bedocs-verify",
   ".cache",
   ".git",
   ".next",

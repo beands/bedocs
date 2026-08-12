@@ -11,7 +11,7 @@ export interface SourceEntry {
   ref: string;
   /** Logical route input; defaults to `ref` if omitted. May include slashes. */
   slug?: string;
-  /** Frontmatter-equivalent metadata, validated against the Blume meta schema. */
+  /** Frontmatter-equivalent metadata, validated against the BeDocs meta schema. */
   data: Record<string, unknown>;
   /** The renderable body as Markdown/MDX source text (frontmatter stripped). */
   body: { format: "md" | "mdx"; text: string };
@@ -48,7 +48,7 @@ export interface SourceLoadResult {
  */
 export interface SourceContext {
   projectRoot: string;
-  /** Per-source cache dir under `.blume/cache/<source>/`. */
+  /** Per-source cache dir under `.bedocs/cache/<source>/`. */
   cacheDir: string;
   mode: "dev" | "build";
   /** Dir for downloaded assets (served from the site's public dir). */
@@ -57,8 +57,8 @@ export interface SourceContext {
   assetsBaseUrl?: string;
   /**
    * Re-fetch remote content instead of serving the cached snapshot. True for
-   * builds and `blume sync`; false in dev (cache-first for fast, offline-tolerant
-   * restarts — refresh with `blume sync` or an opt-in `pollInterval`).
+   * builds and `bedocs sync`; false in dev (cache-first for fast, offline-tolerant
+   * restarts — refresh with `bedocs sync` or an opt-in `pollInterval`).
    */
   refresh?: boolean;
   /**
@@ -79,7 +79,7 @@ export interface ContentSource {
   /**
    * Whether entries render through the staging collection. Filesystem sources
    * render through Astro's existing `docs` glob collection (`false`); every
-   * other source materializes MDX into `.blume/content` (`true`).
+   * other source materializes MDX into `.bedocs/content` (`true`).
    */
   readonly staged: boolean;
   /** Optional route prefix; the source's routes namespace under `/<prefix>/`. */

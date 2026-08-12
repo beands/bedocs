@@ -103,7 +103,7 @@ export interface OgCardOptions {
   site?: string;
   /**
    * Pre-fetched image entries, or a group controlling how remote images (and
-   * emoji glyphs) are fetched. Blume merges in a shared glyph cache; see
+   * emoji glyphs) are fetched. BeDocs merges in a shared glyph cache; see
    * {@link resolveImages}.
    */
   images?: RenderOptions["images"];

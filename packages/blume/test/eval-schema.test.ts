@@ -81,7 +81,7 @@ describe("loadEvalsFile", () => {
 
   it("rejects a missing file with an init hint", async () => {
     const missing = join(tmpdir(), "blume-eval-nowhere", "evals.yaml");
-    await expect(loadEvalsFile(missing)).rejects.toThrow("blume eval init");
+    await expect(loadEvalsFile(missing)).rejects.toThrow("bedocs eval init");
   });
 
   it("rejects malformed YAML", async () => {
