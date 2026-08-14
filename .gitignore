@@ -11,6 +11,7 @@ coverage
 .env
 .env.*
 !.env.example
+.git-credentials
 
 # Admin panel settings (contains API keys)
 settings.json
