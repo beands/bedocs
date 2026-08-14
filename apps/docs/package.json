@@ -3,16 +3,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "blume dev",
-    "build": "blume build",
-    "preview": "blume preview",
-    "typecheck": "blume check",
-    "audit": "blume audit",
+    "dev": "bedocs dev",
+    "build": "bedocs build",
+    "preview": "bedocs preview",
+    "typecheck": "bedocs check",
+    "audit": "bedocs audit",
     "test:e2e": "playwright test",
-    "translate": "blume translate"
+    "translate": "bedocs translate"
   },
   "dependencies": {
-    "blume": "workspace:*"
+    "@beands/bedocs": "workspace:*"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.0",

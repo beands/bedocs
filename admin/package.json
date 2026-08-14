@@ -1,0 +1,19 @@
+{
+  "name": "bedocs-admin",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "BeDocs Admin Panel — multi-project documentation management with crea-ai AI generation (Gemini models, RAG, staged processing)",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node -e \"const s=require('child_process').spawn('node',['server.js'],{cwd:__dirname});setTimeout(()=>{require('http').get('http://localhost:3001/api/projects',r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))},2000);s.on('exit',()=>process.exit(1))\""
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "multer": "^1.4.5-lts.1",
+    "cors": "^2.8.5"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

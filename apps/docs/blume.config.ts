@@ -1,4 +1,4 @@
-import { defineConfig } from "blume";
+import { defineConfig } from "@beands/bedocs";
 
 export default defineConfig({
   ai: {
@@ -10,19 +10,14 @@ export default defineConfig({
   analytics: {
     vercel: true,
   },
-  banner: {
-    content: "BeDocs is now publicly available.",
-    dismissible: true,
-    id: "beta",
-  },
   content: {
     root: "content",
     sources: [
       { root: "content", type: "filesystem" },
       {
-        owner: "haydenbleasel",
+        owner: "beandsmedia",
         prefix: "changelog",
-        repo: "blume",
+        repo: "bedocs",
         type: "github-releases",
       },
     ],
@@ -32,13 +27,8 @@ export default defineConfig({
     output: "server",
   },
   description:
-    "Open-source, markdown-first documentation powered by Astro and Vite.",
+    "Платформа для создания документации ваших проектов.",
   export: true,
-  github: {
-    dir: "apps/docs",
-    owner: "haydenbleasel",
-    repo: "blume",
-  },
   i18n: {
     defaultLocale: "ru",
     locales: [
@@ -60,18 +50,6 @@ export default defineConfig({
     tabs: [
       {
         label: {
-          de: "Doku",
-          en: "Docs",
-          hi: "दस्तावेज़",
-          ja: "ドキュメント",
-          pt: "Documentação",
-          ru: "Документация",
-        },
-        path: "/docs",
-      },
-      { label: "CLI", path: "/cli" },
-      {
-        label: {
           de: "Änderungen",
           en: "Changelog",
           hi: "चेंजलॉग",
@@ -82,10 +60,6 @@ export default defineConfig({
         path: "/changelog",
       },
     ],
-  },
-  seo: {
-    og: { titles: { "/cli": "CLI" } },
-    x: { creator: "@haydenbleasel", handle: "@haydenbleasel" },
   },
   theme: {
     accent: "teal",

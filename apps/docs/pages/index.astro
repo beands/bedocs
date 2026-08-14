@@ -1,74 +1,84 @@
 ---
 import PageLayout from "blume/components/layout/PageLayout.astro";
 import data from "blume:data";
-import Batteries from "./_home/Batteries.astro";
-import BuiltForModels from "./_home/BuiltForModels.astro";
-import Cli from "./_home/Cli.astro";
-import Components from "./_home/Components.astro";
-import ContentSources from "./_home/ContentSources.astro";
-import Footer from "./_home/Footer.astro";
-import Hero from "./_home/Hero.astro";
-import InstallCta from "./_home/InstallCta.astro";
-import MarkdownShowcase from "./_home/MarkdownShowcase.astro";
-import ProductPreview from "./_home/ProductPreview.astro";
-import { installCopyScript } from "./_home/shared.ts";
-import Sponsors from "./_home/Sponsors.astro";
-import Spotlight from "./_home/Spotlight.astro";
+import { getBlumeCollection } from "blume/runtime";
 
-// Everything the landing page needs comes from the resolved Blume config, so it
-// stays in sync with the docs site (title, description, banner, theme mode).
-// PageLayout supplies the document shell, header, theme, and fonts — the
-// document `<html>`/`<head>`, theme + banner pre-paint scripts, and banner that
-// this page used to hand-roll all live there now.
+export const prerender = false;
+
 const { config } = data;
-const pageTitle = `${config.title} — fast, AI-ready, markdown-first docs`;
-// A landing-page-specific meta description so the home page reads distinctly
-// from the site-wide default (which other pages fall back to).
-const pageDescription =
-  "Ship beautiful, fast, AI-ready documentation from plain markdown. Blume gives you search, theming, SEO, and one-command deploys on Astro and Vite.";
+
+const projectRoutes = getBlumeCollection(data, { prefix: "/projects" });
+
+const projects = projectRoutes
+  .filter((route) => route.path.split("/").length === 3)
+  .map((route) => ({
+    title: route.title,
+    path: route.path,
+    description: route.description || "",
+  }));
 ---
 
 <PageLayout
+  site={{ title: config.title, description: config.description }}
+  logo={config.logo}
   analytics={config.analytics}
-  banner={config.banner}
+  navigation={data.navigation}
   favicon={config.favicon}
   fontCssVars={data.fontCssVars}
-  logo={config.logo}
-  navigation={data.navigation}
-  ogEnabled={config.og.enabled}
-  ogImage="/opengraph-image.png"
-  page={{ description: pageDescription, route: "/", title: pageTitle }}
-  searchEnabled={config.search.enabled}
-  site={{ description: config.description, title: config.title }}
-  siteUrl={config.site}
   themeMode={config.theme.mode}
-  x={config.x}
+  searchEnabled={config.search.enabled}
+  siteUrl={config.site}
+  ogEnabled={config.og.enabled}
+  page={{ title: config.title, description: config.description }}
 >
-  <div
-    class="mx-auto grid max-w-[1400px] gap-16 px-6 py-20 sm:py-24 lg:gap-24 xl:gap-32"
-  >
-    <Hero />
+  <section class="mx-auto max-w-5xl px-6 py-20">
+    <div style="text-align: center; margin-bottom: 48px;">
+      <h1 style="font-size: 2.5rem; font-weight: 700; margin-bottom: 12px;">
+        {config.title}
+      </h1>
+      <p style="font-size: 1.125rem; color: var(--gray-500); max-width: 600px; margin: 0 auto 24px;">
+        {config.description}
+      </p>
+      <a href="http://192.168.0.101:3001" target="_blank" style="display: inline-block; padding: 10px 24px; background: #14b8a6; color: white; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 500;">
+        + Создать проект документации
+      </a>
+    </div>
 
-    <ProductPreview />
-
-    <Batteries />
-
-    <MarkdownShowcase />
-
-    <ContentSources />
-
-    <BuiltForModels />
-
-    <Spotlight />
-
-    <Components />
-
-    <Cli />
-
-    <Sponsors />
-
-    <InstallCta />
-  </div>
-  <script is:inline set:html={installCopyScript} />
-  <Footer slot="footer" />
+    {projects.length > 0 ? (
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;">
+        {projects.map((project) => (
+          <a
+            href={project.path}
+            style={{
+              display: "block",
+              padding: "24px",
+              border: "1px solid var(--gray-200)",
+              borderRadius: "12px",
+              textDecoration: "none",
+              color: "inherit",
+              transition: "all 0.2s",
+            }}
+          >
+            <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 8px;">
+              {project.title}
+            </h2>
+            <p style="font-size: 0.875rem; color: var(--gray-500); margin: 0;">
+              {project.description}
+            </p>
+            <span style="display: inline-block; margin-top: 12px; font-size: 0.875rem; color: #14b8a6;">
+              Открыть документацию →
+            </span>
+          </a>
+        ))}
+      </div>
+    ) : (
+      <div style="text-align: center; padding: 60px 20px; color: var(--gray-500);">
+        <h2 style="font-size: 1.25rem; margin-bottom: 8px;">Проектов пока нет</h2>
+        <p style="margin-bottom: 16px;">Создайте первый проект документации через панель управления</p>
+        <a href="http://192.168.0.101:3001" target="_blank" style="color: #14b8a6; font-size: 14px;">
+          Открыть панель управления →
+        </a>
+      </div>
+    )}
+  </section>
 </PageLayout>

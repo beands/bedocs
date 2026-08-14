@@ -29,3 +29,21 @@ jobs:
         run: cd apps/docs && bun run translate --check
       - name: Build docs
         run: cd apps/docs && bun run build
+
+  admin-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install admin dependencies
+        run: cd admin && npm install
+      - name: Smoke test admin server
+        run: |
+          cd admin
+          node server.js &
+          SERVER_PID=$!
+          sleep 3
+          curl -sf http://localhost:3001/api/projects > /dev/null && echo "Admin server OK"
+          kill $SERVER_PID 2>/dev/null || true

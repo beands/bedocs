@@ -1,4 +1,4 @@
-import { defineMeta } from "blume";
+import { defineMeta } from "@beands/bedocs";
 
 export default defineMeta({
   order: 5,

@@ -43,6 +43,11 @@ upstream  https://github.com/haydenbleasel/blume.git
 - `packages/blume/src/cli/` — русские описания команд и сообщения
 - `packages/blume/src/core/diagnostics.ts` — русские сообщения об ошибках
 - `packages/blume/src/search/` — нормализация русского текста
+- `admin/` — admin-панель для управления multi-project документацией (Express.js + static HTML/JS)
+  - `admin/server.js` — API: CRUD проектов, upload-and-process, AI-генерация через crea-ai (RAG, поэтапный план, async job polling)
+  - `admin/public/index.html` — UI: drag-and-drop загрузка, выбор файлов, прогресс AI-генерации
+- `apps/docs/pages/index.astro` — динамическая главная страница со списком проектов
+- `apps/docs/content/projects/` — multi-project структура контента
 - `NOTICE.md`, `UPSTREAM.md`, `SECURITY.md`, `CONTRIBUTING.md` — BeDocs-specific файлы
 - `scripts/check-branding.*`, `scripts/check-translations.*` — скрипты проверок
 - Шаблоны Synthix, Taskcraft CRM, BeandsBooker
