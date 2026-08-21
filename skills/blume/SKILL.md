@@ -5,9 +5,9 @@ description: Build and maintain documentation sites with Blume, the markdown-fir
 
 # Blume
 
-Blume is an open-source, **markdown-first** documentation framework built on Astro and Vite. Drop Markdown or MDX into a folder, run `blume dev`, and get a production-grade docs site — navigation, search, theming, Open Graph images, and a rich component library — with no app boilerplate to write or maintain.
+Blume is an open-source, **markdown-first** documentation framework built on Astro and Vite. Drop Markdown or MDX into a folder, run `bedocs dev`, and get a production-grade docs site — navigation, search, theming, Open Graph images, and a rich component library — with no app boilerplate to write or maintain.
 
-The core idea: **the framework _is_ the template.** There's no starter to clone and no project to own before you've written a word. The only thing you touch is your content. When you outgrow the defaults, you add configuration one file at a time — and you can `blume eject` to a plain Astro project the day you want full control.
+The core idea: **the framework _is_ the template.** There's no starter to clone and no project to own before you've written a word. The only thing you touch is your content. When you outgrow the defaults, you add configuration one file at a time — and you can `bedocs eject` to a plain Astro project the day you want full control.
 
 ## What makes it different
 
@@ -55,8 +55,8 @@ Navigation, search, and page metadata are inferred from your files as you add th
 - **AI** — `llms.txt`, raw Markdown URLs, Copy as Markdown, Open in chat, an Ask AI assistant, and an MCP server endpoint served by the docs site itself.
 - **Navigation** — inferred from files, refined with `meta.ts` or config.
 - **SEO** — metadata, Open Graph images, RSS feeds, and JSON-LD.
-- **Customization** — component overrides, React islands, custom pages, theme tokens, and a source-component registry via `blume add`.
-- **Eject** — `blume eject` produces a standalone Astro project that still uses the `blume` package.
+- **Customization** — component overrides, React islands, custom pages, theme tokens, and a source-component registry via `bedocs add`.
+- **Eject** — `bedocs eject` produces a standalone Astro project that still uses the `blume` package.
 
 ## How it works
 

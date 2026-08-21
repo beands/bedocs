@@ -31,7 +31,7 @@ Keep content where it is — set `content.root: "src/content/docs"`.
 | `head` | **drop and report** (there is no `seo.metatags`); analytics `<script>` entries → the `analytics` config |
 | `lastUpdated: true` | `lastModified: true` |
 | `customCss` | drop → move into a root **`theme.css`** file (auto-picked-up; not a config field) |
-| `components` (overrides) | Blume's layout slots via `defineComponents({ layout: { Header, Search, Sidebar, TableOfContents, Footer, … } })` — a near-1:1 map; reach for `blume eject` only beyond those |
+| `components` (overrides) | Blume's layout slots via `defineComponents({ layout: { Header, Search, Sidebar, TableOfContents, Footer, … } })` — a near-1:1 map; reach for `bedocs eject` only beyond those |
 | `plugins` | **map, don't blanket-drop** — see Plugins below |
 | `pagination: false`, `pagefind`/Pagefind options, `titleDelimiter`, `credits`, `disable404Route`, `routeMiddleware` | drop (report) |
 | `locales` / `defaultLocale` | `i18n` (see below) |
@@ -91,7 +91,7 @@ Starlight content is full of Expressive Code fence meta; Blume understands some 
 - `starlight-blog` → `type: blog` pages.
 - `starlight-versions` → `navigation.selectors` with `kind: "version"`.
 - `starlight-image-zoom` → delete (Blume zooms content images by default).
-- `starlight-links-validator` → delete (`blume validate` covers it).
+- `starlight-links-validator` → delete (`bedocs validate` covers it).
 - Anything else → report.
 
 ## Assets

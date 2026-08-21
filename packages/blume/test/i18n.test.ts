@@ -23,6 +23,7 @@ import { buildManifest } from "../src/core/manifest.ts";
 import { discoverFolderMeta } from "../src/core/meta.ts";
 import { blumeConfigSchema } from "../src/core/schema.ts";
 import type {
+  BlumeConfigInput,
   FolderMeta,
   ResolvedConfig,
   ResolvedI18nConfig,
@@ -30,7 +31,9 @@ import type {
 import type { NavNode, ProjectContext } from "../src/core/types.ts";
 import { UI_PACKS } from "../src/core/ui-packs/index.ts";
 
-const config = (i18nOver: Record<string, unknown> = {}): ResolvedConfig =>
+type I18nInput = Partial<NonNullable<BlumeConfigInput["i18n"]>>;
+
+const config = (i18nOver: I18nInput = {}): ResolvedConfig =>
   blumeConfigSchema.parse({
     i18n: {
       defaultLocale: "en",
@@ -42,7 +45,7 @@ const config = (i18nOver: Record<string, unknown> = {}): ResolvedConfig =>
     },
   });
 
-const i18nOf = (over: Record<string, unknown> = {}): ResolvedI18nConfig => {
+const i18nOf = (over: I18nInput = {}): ResolvedI18nConfig => {
   const value = config(over).i18n;
   if (!value) {
     throw new Error("expected i18n");
@@ -58,7 +61,7 @@ afterAll(async () => {
   );
 });
 
-const FILES: Record<string, string> = {
+const FILES = {
   "docs/fr/guides/quickstart.mdx": "---\ntitle: Démarrage\n---\n# Démarrage\n",
   "docs/fr/index.mdx": "---\ntitle: Accueil\n---\n# Accueil\n",
   "docs/guides/only-en.mdx": "---\ntitle: Only EN\n---\n# Only EN\n",
@@ -90,6 +93,7 @@ const buildProject = async (resolved: ResolvedConfig) => {
     i18n: resolved.i18n,
     navigation: resolved.navigation,
   });
+  // SAFETY: buildManifest reads only contentRoot and root from the context.
   const context = { contentRoot, root } as ProjectContext;
   const manifest = buildManifest({ config: resolved, context, graph });
   return { graph, manifest, pages };
@@ -97,6 +101,18 @@ const buildProject = async (resolved: ResolvedConfig) => {
 
 const labelsOf = (nodes: NavNode[]): string[] =>
   nodes.map((node) => node.label);
+
+const groupDisplayOf = (
+  nodes: NavNode[],
+  label: string
+): string | undefined => {
+  for (const node of nodes) {
+    if (node.kind === "group" && node.label === label) {
+      return node.display;
+    }
+  }
+  return undefined;
+};
 
 /** Write a content tree to a fresh temp dir and return its content root. */
 const tempContent = async (files: Record<string, string>): Promise<string> => {
@@ -601,6 +617,84 @@ describe("dot parser and shared files", () => {
     );
   });
 
+  it("resolves per-locale meta display independently", async () => {
+    const resolved = config();
+    const contentRoot = await tempContent({
+      "fr/guides/intro.mdx": "# Intro fr\n",
+      "fr/guides/meta.ts": 'export default { display: "group" };\n',
+      "guides/intro.mdx": "# Intro\n",
+      "guides/meta.ts": 'export default { display: "page" };\n',
+    });
+    const { pages } = await discoverIn(contentRoot, resolved);
+    const folderMeta = await discoverFolderMeta(contentRoot);
+    const graph = buildContentGraph(pages, {
+      folderMeta: folderMeta.meta,
+      i18n: resolved.i18n,
+      navigation: resolved.navigation,
+      sharedFolderMeta: folderMeta.shared,
+    });
+
+    expect(
+      groupDisplayOf(graph.navigationByLocale.en?.sidebar ?? [], "Guides")
+    ).toBe("page");
+    expect(
+      groupDisplayOf(graph.navigationByLocale.fr?.sidebar ?? [], "Guides")
+    ).toBe("group");
+  });
+
+  it("ignores a fallback-filled index's display over the locale's own meta", async () => {
+    const resolved = config();
+    const contentRoot = await tempContent({
+      "fr/guides/intro.mdx": "# Intro fr\n",
+      "fr/guides/meta.ts": 'export default { display: "group" };\n',
+      "guides/index.mdx":
+        "---\ntitle: Guides\nsidebar:\n  display: page\n---\n# Guides\n",
+      "guides/intro.mdx": "# Intro\n",
+    });
+    const { pages } = await discoverIn(contentRoot, resolved);
+    const folderMeta = await discoverFolderMeta(contentRoot);
+    const graph = buildContentGraph(pages, {
+      folderMeta: folderMeta.meta,
+      i18n: resolved.i18n,
+      navigation: resolved.navigation,
+      sharedFolderMeta: folderMeta.shared,
+    });
+
+    // The default locale honors its own index frontmatter...
+    expect(
+      groupDisplayOf(graph.navigationByLocale.en?.sidebar ?? [], "Guides")
+    ).toBe("page");
+    // ...but fr's tree is padded with that index as a fallback fill, and the
+    // fallback locale's frontmatter must not override fr's authored meta.ts.
+    expect(
+      groupDisplayOf(graph.navigationByLocale.fr?.sidebar ?? [], "Guides")
+    ).toBe("group");
+  });
+
+  it("shares a meta.$.ts display with every locale", async () => {
+    const resolved = config();
+    const contentRoot = await tempContent({
+      "fr/guides/intro.mdx": "# Intro fr\n",
+      "guides/intro.mdx": "# Intro\n",
+      "guides/meta.$.ts": 'export default { display: "page" };\n',
+    });
+    const { pages } = await discoverIn(contentRoot, resolved);
+    const folderMeta = await discoverFolderMeta(contentRoot);
+    const graph = buildContentGraph(pages, {
+      folderMeta: folderMeta.meta,
+      i18n: resolved.i18n,
+      navigation: resolved.navigation,
+      sharedFolderMeta: folderMeta.shared,
+    });
+
+    expect(
+      groupDisplayOf(graph.navigationByLocale.en?.sidebar ?? [], "Guides")
+    ).toBe("page");
+    expect(
+      groupDisplayOf(graph.navigationByLocale.fr?.sidebar ?? [], "Guides")
+    ).toBe("page");
+  });
+
   it("reports an index-title mismatch once, not once per locale", async () => {
     // Under `dot` every locale resolves the same meta entry, and the
     // untranslated index page pads every locale's tree as a fallback fill — a
@@ -845,9 +939,7 @@ describe("UI dictionaries", () => {
     // each group to `{}` — and since layout components resolve Zod from the
     // consuming project, a ui-less PageLayout would then render blank chrome
     // (empty search labels/aria-labels, empty skip link).
-    const groups = Object.entries(
-      EN_UI as unknown as Record<string, Record<string, string>>
-    );
+    const groups = Object.entries(EN_UI);
     expect(groups.length).toBeGreaterThan(0);
     for (const [group, values] of groups) {
       expect(
@@ -997,6 +1089,8 @@ describe("UI dictionaries", () => {
   });
 
   it("every shipped pack uses only known UI keys", () => {
+    // SAFETY: EN_UI is a two-level structure of string leaves; the dictionary
+    // view only enables lookups by the arbitrary group names packs declare.
     const baseline = EN_UI as Record<string, Record<string, string>>;
     const violations: string[] = [];
     for (const [code, pack] of Object.entries(UI_PACKS)) {

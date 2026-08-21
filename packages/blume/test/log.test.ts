@@ -23,10 +23,10 @@ const originalWrite = process.stderr.write;
 
 beforeEach(() => {
   output = "";
-  process.stderr.write = ((chunk: string) => {
-    output += chunk;
+  process.stderr.write = (chunk: string | Uint8Array): boolean => {
+    output += String(chunk);
     return true;
-  }) as unknown as typeof process.stderr.write;
+  };
 });
 
 afterEach(() => {
@@ -53,9 +53,7 @@ describe("reportDiagnostics", () => {
   });
 });
 
-const captureStdout = (
-  run: () => boolean
-): { out: string; result: boolean } => {
+const captureStdout = (run: () => boolean) => {
   let out = "";
   const spy = spyOn(process.stdout, "write").mockImplementation((chunk) => {
     out += String(chunk);
@@ -83,13 +81,15 @@ describe("reportDiagnosticsJson", () => {
       reportDiagnosticsJson([secret, warning], "/root")
     );
     expect(result).toBe(true);
+    // SAFETY: `out` is the JSON payload reportDiagnosticsJson just printed,
+    // which always carries `diagnostics` and `summary`.
     const payload = JSON.parse(out) as {
       diagnostics: Diagnostic[];
       summary: Record<string, number>;
     };
     // enrichDiagnostic fills docsUrl from the code map.
     expect(payload.diagnostics[0]?.docsUrl).toBe(
-      "https://useblume.dev/docs/deployment"
+      "https://github.com/beands/bedocs/docs/deployment"
     );
     // The absolute file is made relative to root.
     expect(payload.diagnostics[0]?.file).toBe("apps/docs/blume.config.ts");
@@ -101,6 +101,8 @@ describe("reportDiagnosticsJson", () => {
       reportDiagnosticsJson([{ ...secret, severity: "warning" }])
     );
     expect(result).toBe(false);
+    // SAFETY: `out` is the JSON payload reportDiagnosticsJson just printed,
+    // which always carries `diagnostics`.
     const payload = JSON.parse(out) as { diagnostics: Diagnostic[] };
     expect(payload.diagnostics[0]?.file).toBe(
       "/root/apps/docs/blume.config.ts"

@@ -13,6 +13,11 @@ export interface SearchHit {
   section?: string;
   /** Plain-text page content, used to render the preview pane. */
   content?: string;
+  /**
+   * Docs version the hit belongs to (`""` = current). Local indexes and the
+   * hosted Algolia/Typesense adapters set it; other providers leave it unset.
+   */
+  version?: string;
 }
 
 /** A category pill with its result count. */
@@ -30,7 +35,12 @@ export interface SearchResult {
 /** A configured query function — the common contract every provider returns. */
 export type SearchFn = (
   query: string,
-  options?: { section?: string; locale?: string }
+  options?: {
+    section?: string;
+    locale?: string;
+    /** Docs version to scope to (`""` = current); omitted disables it. */
+    version?: string;
+  }
 ) => Promise<SearchResult>;
 
 /** A document in the client-loaded `blume-search.json` index. */
@@ -42,6 +52,7 @@ export interface IndexedDocument {
   breadcrumb?: string[];
   section?: string;
   locale?: string;
+  version?: string;
 }
 
 /** Max results surfaced in the dialog. */
@@ -83,6 +94,38 @@ export const highlight = (text: string, query: string): string => {
     )
     .join("");
 };
+
+// Either a tag-shaped run — an opening `<` with a letter or `/` after it,
+// through the closing `>` (or end of string for an unterminated tag) — or a
+// lone `<`. A run can't span a later `<` (`[^<>]`), so between the two
+// alternatives every `<` in the input lands inside a captured run.
+const ANGLE_RUN = /(?<run><\/?[a-z][^<>]*>?|<)/iu;
+const BARE_MARK = /^<\/?mark>$/iu;
+
+/**
+ * Reduce provider-supplied excerpt markup to the `<mark>` highlighting the
+ * dialog expects. Remote excerpts (Pagefind's index, hosted engines) are
+ * rendered via `innerHTML`, so the output alphabet is pinned: bare
+ * `<mark>`/`</mark>` tags (attributes make even a mark untrusted), text, and
+ * entities. Tag-shaped runs are dropped; every other `<` is escaped, which
+ * renders identically but can't be parsed as markup (`<!--` would otherwise
+ * open a comment in `innerHTML` and swallow the rest of the excerpt). Split on
+ * runs covering every `<` rather than deleting tags in place: a deletion can
+ * splice the text around it into a fresh tag (`<<b>script>` → `<script>`),
+ * while here no `<` survives outside a run, so the only ones emitted are the
+ * bare mark tags. String-level on purpose: this also runs under DOM-less
+ * tests, where DOMPurify/DOMParser don't exist.
+ */
+export const sanitizeExcerpt = (html: string): string =>
+  html
+    .split(ANGLE_RUN)
+    .map((part, index) => {
+      if (index % 2 === 0 || BARE_MARK.test(part)) {
+        return part;
+      }
+      return part === "<" ? "&lt;" : "";
+    })
+    .join("");
 
 /** First index in `text` where any query token matches (case-insensitive). */
 const matchIndex = (text: string, query: string): number => {
@@ -161,6 +204,7 @@ export const buildResult = (
     section: doc.section ?? "",
     title: highlight(doc.title, query),
     url: doc.route,
+    version: doc.version,
   }));
   return { hits, sections };
 };

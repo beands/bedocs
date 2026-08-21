@@ -52,7 +52,7 @@ Blume ships as a single published package, `packages/blume`, with internal modul
 | `deploy` | Adapter output, sitemap, `robots.txt`, RSS, redirects |
 | `openapi` | OpenAPI/AsyncAPI parsing and reference rendering |
 | `ai` | `llms.txt` generation, Ask AI, MCP server |
-| `registry` | `blume add` registry and `blume eject` |
+| `registry` | `bedocs add` registry and `bedocs eject` |
 | `runtime` | Public runtime helpers for custom pages and islands |
 
 Agent skills live in `skills/` at the repo root and are bundled into the published package.
@@ -61,7 +61,7 @@ Agent skills live in `skills/` at the repo root and are bundled into the publish
 
 The CLI loads config, scans content into a graph, and writes a hidden Astro project to `.blume/`. Generated files are owned by Blume and recreated on each run; only changed files are rewritten so Vite HMR stays fast. `.blume/` is safe to delete.
 
-The generated catch-all page imports shipped components from `blume/...`, the generated data module, and user overrides. `blume eject` regenerates the same files with project-relative paths into your project and removes `.blume/`.
+The generated catch-all page imports shipped components from `blume/...`, the generated data module, and user overrides. `bedocs eject` regenerates the same files with project-relative paths into your project and removes `.blume/`.
 
 ## Conventions
 

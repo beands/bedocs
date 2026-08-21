@@ -75,8 +75,8 @@ describe("fixPrompt", () => {
     expect(prompt).toContain("/tmp/blume-audit-x/report.json");
     // The agent has to rebuild before re-auditing — the audit reads dist/,
     // and the fixes land in .mdx sources.
-    expect(prompt).toContain("`blume build`");
-    expect(prompt).toContain("`blume audit`");
+    expect(prompt).toContain("`bedocs build`");
+    expect(prompt).toContain("`bedocs audit`");
     expect(prompt).toContain("`suggestion`");
   });
 
@@ -129,14 +129,18 @@ describe("launchAgent", () => {
     );
     await chmod(bin, 0o755);
 
-    const prompt = "fix the site\nthen verify with `blume audit`";
+    const prompt = "fix the site\nthen verify with `bedocs audit`";
     expect(await launchAgent(bin, prompt, "win32")).toBe(0);
     const pointer = await readFile(join(dir, "prompt.txt"), "utf-8");
     expect(pointer).toMatch(
       /^Read .*prompt\.md and follow its instructions exactly\.$/u
     );
-    const [promptPath] = pointer.slice("Read ".length).split(" and follow");
-    expect(await readFile(promptPath as string, "utf-8")).toBe(prompt);
-    dirs.push(dirname(promptPath as string));
+    // `split` always yields at least one piece, so the default never applies —
+    // it only convinces the type system the path is a string.
+    const [promptPath = ""] = pointer
+      .slice("Read ".length)
+      .split(" and follow");
+    expect(await readFile(promptPath, "utf-8")).toBe(prompt);
+    dirs.push(dirname(promptPath));
   });
 });

@@ -6,9 +6,9 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "pathe";
 
 /**
- * `blume eject` exercised end-to-end as a subprocess: the success box must
+ * `bedocs eject` exercised end-to-end as a subprocess: the success box must
  * print run commands matching the invoking package manager (detected from
- * `npm_config_user_agent`, like `blume init`), not hardcoded Bun ones.
+ * `npm_config_user_agent`, like `bedocs init`), not hardcoded Bun ones.
  */
 
 const CLI = join(import.meta.dir, "..", "src", "cli", "index.ts");

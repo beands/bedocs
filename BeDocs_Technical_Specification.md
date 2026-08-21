@@ -286,7 +286,7 @@ export const productMeta = {
 
 - старой CLI-команды;
 - старого package specifier;
-- `useblume.dev` в создаваемых шаблонах;
+- `github.com/beands/bedocs` в создаваемых шаблонах;
 - `.blume/` в инструкциях, ошибках и выводе CLI.
 
 Упоминания Blume разрешены в лицензии, NOTICE, истории проекта, upstream-документации и технических комментариях о совместимости.
@@ -1181,7 +1181,7 @@ bun run build
 - [Пакет Blume](https://github.com/haydenbleasel/blume/blob/main/packages/blume/package.json)
 - [Contributing и архитектура](https://github.com/haydenbleasel/blume/blob/main/.github/CONTRIBUTING.md)
 - [MIT License](https://github.com/haydenbleasel/blume/blob/main/LICENSE)
-- [Документация Blume](https://useblume.dev/docs)
+- [Документация Blume](https://github.com/beands/bedocs/docs)
 
 ---
 

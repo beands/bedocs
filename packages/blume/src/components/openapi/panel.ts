@@ -6,6 +6,8 @@
  * theme.
  */
 
+import { copyText, createCopyFlash } from "../copy-feedback.ts";
+
 class BlumePanelTabs extends HTMLElement {
   connectedCallback() {
     const tabs = [
@@ -36,18 +38,19 @@ class BlumePanelTabs extends HTMLElement {
     }
 
     if (copy) {
+      const flash = createCopyFlash((copied) => {
+        if (copied) {
+          copy.dataset.copied = "true";
+        } else {
+          delete copy.dataset.copied;
+        }
+      }, "Copied");
       copy.addEventListener("click", async () => {
         const active = panels.find(
           (panel) => !panel.classList.contains("hidden")
         );
-        try {
-          await navigator.clipboard.writeText(active?.textContent ?? "");
-          copy.dataset.copied = "true";
-          setTimeout(() => {
-            delete copy.dataset.copied;
-          }, 1500);
-        } catch {
-          // Clipboard unavailable (insecure context); silently ignore.
+        if (await copyText(active?.textContent ?? "")) {
+          flash();
         }
       });
     }

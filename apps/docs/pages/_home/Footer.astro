@@ -2,6 +2,7 @@
 // Larger landing footer: a brand rail plus link columns generated from the docs
 // navigation, so it stays in sync with the sidebar.
 import data from "blume:data";
+import type { NavNode } from "@beands/bedocs/core/types.ts";
 
 const { config } = data;
 const title = config.title;
@@ -20,7 +21,7 @@ interface FooterColumn {
 }
 
 // Direct page children of a node list, as footer links.
-const pagesOf = (nodes: typeof data.navigation.sidebar): FooterLink[] =>
+const pagesOf = (nodes: NavNode[]): FooterLink[] =>
   nodes.flatMap((node) =>
     node.kind === "page" ? [{ href: node.route, label: node.label }] : []
   );
@@ -34,9 +35,9 @@ const pagesOf = (nodes: typeof data.navigation.sidebar): FooterLink[] =>
 // group, descend through any single wrapping group until we reach the level
 // that holds the section sub-groups: the lead pages become a "Getting Started"
 // column and each section group ("Content", "Configuration", …) its own column.
-const sidebar = data.navigation?.sidebar ?? [];
+const sidebar: NavNode[] = data.navigation?.sidebar ?? [];
 const primaryTabPath = data.navigation?.tabs?.[0]?.path;
-let roots = sidebar.filter(
+let roots: NavNode[] = sidebar.filter(
   (node) => node.kind === "group" && node.path === primaryTabPath
 );
 if (roots.length === 0) {

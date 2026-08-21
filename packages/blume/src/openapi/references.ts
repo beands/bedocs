@@ -1,6 +1,10 @@
-import { withBasePath } from "../core/base-path.ts";
+import { normalizeRoute, withBasePath } from "../core/base-path.ts";
 import type { ResolvedConfig } from "../core/schema.ts";
-import { trimChar, trimEnd } from "../core/trim.ts";
+import { trimChar } from "../core/trim.ts";
+
+// Re-exported from its home next to the other path helpers; `core/schema.ts`
+// and downstream consumers historically imported it from here.
+export { normalizeRoute } from "../core/base-path.ts";
 
 /**
  * Pure resolution of the configured API reference blocks into concrete routes,
@@ -12,15 +16,21 @@ import { trimChar, trimEnd } from "../core/trim.ts";
 
 export type ReferenceKind = "openapi" | "asyncapi";
 
-/** Who renders a reference: BeDocs's own UI, or the embedded Scalar SPA. */
+/** Who renders a reference: Blume's own UI, or the embedded Scalar SPA. */
 export type ReferenceRenderer = "blume" | "scalar";
 
-/** Per-block display options for the BeDocs renderer. */
+/** Per-block display options for the Blume renderer. */
 export interface ReferenceDisplay {
   /** Code-sample languages shown per operation. */
   codeSamples: string[];
   /** Whether nested schema rows start expanded. */
   expandSchemas: boolean;
+  /**
+   * The "Try it" playground: whether operation pages render it, and the CORS
+   * proxy the Send button routes through (`false` off, a URL string, or
+   * `true` for the built-in `/_api-proxy` endpoint).
+   */
+  playground: { enabled: boolean; proxy: string | boolean };
 }
 
 /** A spec source resolved to a concrete route, label, and renderer. */
@@ -50,10 +60,11 @@ export interface ReferenceSource {
   theme?: string;
   /**
    * Arbitrary Scalar config forwarded to `<ScalarComponent>` (Scalar renderer
-   * only). Takes precedence over BeDocs's derived spec/theme config.
+   * only). Takes precedence over Blume's derived spec/theme config. Typed off
+   * the config schema so the two can never drift.
    */
-  scalar?: Record<string, unknown>;
-  /** Display options carried through to the BeDocs renderer. */
+  scalar?: ResolvedConfig["openapi"]["scalar"];
+  /** Display options carried through to the Blume renderer. */
   display: ReferenceDisplay;
   /**
    * Warnings recorded while deduping — another source's route collided with
@@ -62,18 +73,37 @@ export interface ReferenceSource {
   collisions?: string[];
 }
 
-const NON_SLUG = /[^a-z0-9]+/gu;
+// Keep Unicode letters/marks/numbers so diacritics stay in the slug (ASCII-only
+// stripping turned `Größe` into `gr-e`, which the nav humanizer rendered as
+// `Gr E`); `\p{M}` keeps combining marks attached to their base letter, which
+// NFC cannot always compose away (Devanagari vowel signs, Turkish `İ`'s
+// lowercased combining dot).
+const NON_SLUG = /[^\p{L}\p{M}\p{N}]+/gu;
+// Format characters (ZWNJ, ZWJ, bidi controls) separate no words — hyphenating
+// them would split Persian/Indic compounds the way ASCII stripping split
+// `Größe` — so they are dropped, not replaced.
+const FORMAT_CHARS = /\p{Cf}/gu;
+// A combining mark at the start of the slug has no base letter to attach to
+// (it would glue onto the preceding `/` in a URL), and a marks-only slug must
+// come out empty so callers' fallbacks (`operations`, `reference`) fire.
+const LEADING_MARKS = /^\p{M}+/u;
 
+/**
+ * Lowercase, hyphen-separated slug: `Add a Pet!` -> `add-a-pet`. Unicode
+ * letters are kept (`Größe` -> `größe`), NFC-normalized so canonically
+ * equivalent spellings (NFD input from macOS tooling) land on one slug.
+ * Non-ASCII slugs rely on the emitter percent-encoding the URL where a raw
+ * URI is required (sitemap, canonical).
+ */
 export const slugify = (text: string): string =>
-  trimChar(text.toLowerCase().replace(NON_SLUG, "-"), "-");
-
-/** Normalize a configured route to a single leading slash, no trailing slash. */
-export const normalizeRoute = (route: string): string => {
-  const trimmed = route.trim();
-  const withSlash = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-  const noTrailing = trimEnd(withSlash, "/");
-  return noTrailing === "" ? "/" : noTrailing;
-};
+  trimChar(
+    text
+      .normalize("NFC")
+      .toLowerCase()
+      .replace(FORMAT_CHARS, "")
+      .replace(NON_SLUG, "-"),
+    "-"
+  ).replace(LEADING_MARKS, "");
 
 /** A stable per-reference token from its route: `/api/events` -> `api-events`. */
 const routeSlug = (route: string): string =>
@@ -151,11 +181,9 @@ const referencesFor = (
   });
 };
 
-const NO_DISPLAY: ReferenceDisplay = { codeSamples: [], expandSchemas: false };
-
 /**
- * Resolve every enabled reference. OpenAPI honors its `renderer` (Blume's own UI
- * by default); AsyncAPI is always rendered by Scalar for now.
+ * Resolve every enabled reference. Both blocks honor their `renderer` —
+ * Blume's own UI by default, with the embedded Scalar SPA as the opt-out.
  */
 export const resolveReferences = (
   config: ResolvedConfig
@@ -168,6 +196,7 @@ export const resolveReferences = (
     {
       codeSamples: config.openapi.codeSamples,
       expandSchemas: config.openapi.expandSchemas,
+      playground: config.openapi.playground,
     },
     config.basePath
   ),
@@ -175,8 +204,12 @@ export const resolveReferences = (
     "asyncapi",
     config.asyncapi,
     "Events",
-    "scalar",
-    NO_DISPLAY,
+    config.asyncapi.renderer,
+    {
+      codeSamples: config.asyncapi.codeSamples,
+      expandSchemas: config.asyncapi.expandSchemas,
+      playground: config.asyncapi.playground,
+    },
     config.basePath
   ),
 ];
@@ -209,7 +242,7 @@ const blumeReferenceOf = (
   seen: Map<string, ReferenceSource>,
   usedSlugs: Set<string>
 ): ReferenceSource | null => {
-  if (ref.kind !== "openapi" || ref.renderer !== "blume") {
+  if (ref.renderer !== "blume") {
     return null;
   }
   const kept = seen.get(ref.route);
@@ -237,7 +270,7 @@ const blumeReferenceOf = (
   return accepted;
 };
 
-/** Blume-rendered OpenAPI references, deduped by route (first wins). */
+/** Blume-rendered references (both kinds), deduped by route (first wins). */
 export const blumeReferences = (config: ResolvedConfig): ReferenceSource[] => {
   const seen = new Map<string, ReferenceSource>();
   const usedSlugs = new Set<string>();

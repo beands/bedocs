@@ -103,7 +103,7 @@ const SceneTagline = () => (
 );
 
 // ─── Scene 2 · The money shot (90–510) ──────────────────────────────────────
-// One glassy card: the terminal runs `blume init` → `blume dev`, the live docs
+// One glassy card: the terminal runs `bedocs init` → `bedocs dev`, the live docs
 // site loads in, then it splits into source (left) / rendered content (right).
 const SceneMoneyShot = () => <DevPreview />;
 
@@ -198,8 +198,9 @@ const SceneCta = () => (
 const SceneLogo = () => <BlumeLogo color={WHITE} wordmarkSize={122} />;
 
 // Wire the shipped Geist faces to the CSS variables every remocn component
-// reads (`var(--font-geist-sans)` / `var(--font-geist-mono)`). Asserted because
-// CSSProperties doesn't type custom `--*` keys in this @types/react version.
+// reads (`var(--font-geist-sans)` / `var(--font-geist-mono)`).
+// SAFETY: the object holds only `--*` custom properties — valid inline style
+// keys that CSSProperties cannot type in this @types/react version.
 const FONT_VARS = {
   "--font-geist-mono": GEIST_MONO,
   "--font-geist-sans": GEIST_SANS,

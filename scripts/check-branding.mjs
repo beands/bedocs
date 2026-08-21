@@ -45,7 +45,10 @@ const SKIP_DIRS = new Set([
   ".blume",
   ".turbo",
   ".next",
+  ".vercel",
   "coverage",
+  "scripts",
+  "skills",
 ]);
 
 // File extensions to scan.

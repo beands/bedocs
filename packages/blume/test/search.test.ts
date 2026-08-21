@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
 import { join } from "pathe";
+import type { z } from "zod";
 
 import type { BlumeProject } from "../src/core/project-graph.ts";
 import { blumeConfigSchema, pageMetaSchema } from "../src/core/schema.ts";
@@ -31,11 +32,28 @@ const BODY = [
   "const secret = 1;",
   "```",
   "",
+  "A [reference link][ref] and 5 * 3 stars.\\",
+  "after a hard break.",
+  "",
+  "[ref]: /elsewhere",
+  "",
+  '<Callout kind="warn">',
+  "Callouts keep their inner prose indexed.",
+  "</Callout>",
+  "",
+  "| Region | Latency |",
+  "| ------ | ------- |",
+  "| west   | 40ms    |",
+  "",
 ].join("\n");
 
+// SAFETY: `buildSearchDocuments` reads only a page's id, sourcePath, and the
+// meta fields a test sets; the remaining PageRecord fields are unused here.
 const page = (over: Partial<PageRecord> & Pick<PageRecord, "id">): PageRecord =>
   ({ sourcePath: join(root, over.id), ...over }) as PageRecord;
 
+// SAFETY: the document builder reads only the manifest-route fields listed
+// below; the rest of RouteManifestEntry is unused by these tests.
 const route = (over: Partial<RouteManifestEntry>): RouteManifestEntry =>
   ({
     contentType: "doc",
@@ -53,11 +71,13 @@ const projectWith = (
   pages: PageRecord[],
   routes: RouteManifestEntry[]
 ): BlumeProject =>
+  // SAFETY: `buildSearchDocuments` reads only `config`, `graph.pages`, and
+  // `manifest.routes` from the project.
   ({
     config: blumeConfigSchema.parse({}),
     graph: { pages },
     manifest: { routes },
-  }) as unknown as BlumeProject;
+  }) as BlumeProject;
 
 const VIS_BODY = [
   "---",
@@ -149,6 +169,8 @@ describe("pageFacets", () => {
 
 describe("buildSearchDocuments", () => {
   it("emits declared facet values and omits the field elsewhere", async () => {
+    // SAFETY: `buildSearchDocuments` reads only `config`, `graph.pages`, and
+    // `manifest.routes` from the project.
     const project = {
       config: configWithRfcFacets(["status"]),
       graph: {
@@ -161,7 +183,7 @@ describe("buildSearchDocuments", () => {
         ],
       },
       manifest: { routes: [route({ contentType: "rfc" })] },
-    } as unknown as BlumeProject;
+    } as BlumeProject;
     const [doc] = await buildSearchDocuments(project);
     expect(doc?.facets).toStrictEqual({ status: "enforced" });
 
@@ -206,6 +228,17 @@ describe("buildSearchDocuments", () => {
     expect(doc?.content).toContain("5 credits each");
     expect(doc?.content).toContain("Retries are billed separately");
     expect(doc?.content).toContain("quota resets at midnight");
+    // Reference-style link text is kept; its definition URL is dropped.
+    expect(doc?.content).toContain("reference link");
+    expect(doc?.content).not.toContain("/elsewhere");
+    // Literal asterisks in prose are text, not emphasis to strip.
+    expect(doc?.content).toContain("5 * 3 stars");
+    // A block-level JSX component is one CommonMark html node: its tags go,
+    // its inner prose stays indexed.
+    expect(doc?.content).toContain("Callouts keep their inner prose indexed");
+    expect(doc?.content).not.toContain("<Callout");
+    // GFM table cells are text.
+    expect(doc?.content).toContain("west");
   });
 
   it("keeps Markdown and fenced code when content is 'markdown'", async () => {
@@ -230,7 +263,7 @@ describe("buildSearchDocuments", () => {
         route({ id: "a.md", path: "/guides", title: "Guides" }),
         route({ id: "a.md", path: "/guides/setup", title: "Setup" }),
       ]
-    ) as unknown as { graph: { navigation: unknown } };
+    );
     project.graph.navigation = {
       featured: [],
       selectors: [],
@@ -238,13 +271,13 @@ describe("buildSearchDocuments", () => {
         {
           children: [
             {
-              key: "setup",
               kind: "page",
               label: "Setup",
               pageId: "a.md",
               route: "/guides/setup",
             },
           ],
+          display: "flat",
           kind: "group",
           label: "Guides",
           route: "/guides",
@@ -252,7 +285,7 @@ describe("buildSearchDocuments", () => {
       ],
       tabs: [],
     };
-    const docs = await buildSearchDocuments(project as BlumeProject);
+    const docs = await buildSearchDocuments(project);
     expect(docs.find((doc) => doc.route === "/guides")?.section).toBe("Guides");
     expect(docs.find((doc) => doc.route === "/guides/setup")?.section).toBe(
       "Guides"
@@ -317,7 +350,11 @@ describe("buildSearchDocuments — <Visibility> audiences", () => {
 // When the search provider is "none" every route is non-indexable, but the MCP
 // server is a separate feature and should still index docs.
 describe("buildSearchDocuments with includeWhenDisabled", () => {
-  const projectNoSearch = (over: Record<string, unknown> = {}): BlumeProject =>
+  const projectNoSearch = (
+    over: z.input<typeof pageMetaSchema> = {}
+  ): BlumeProject =>
+    // SAFETY: `buildSearchDocuments` reads only `config`, `graph.pages`, and
+    // `manifest.routes` from the project.
     ({
       config: blumeConfigSchema.parse({ search: { provider: "none" } }),
       graph: {
@@ -332,7 +369,7 @@ describe("buildSearchDocuments with includeWhenDisabled", () => {
       manifest: {
         routes: [route({ id: "a.md", indexable: false, path: "/a" })],
       },
-    }) as unknown as BlumeProject;
+    }) as BlumeProject;
 
   it("indexes nothing by default when search is disabled", async () => {
     const docs = await buildSearchDocuments(projectNoSearch());

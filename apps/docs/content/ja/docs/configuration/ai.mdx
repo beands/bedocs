@@ -102,6 +102,14 @@ export default defineConfig({
 
 Copy as Markdown と同様、セットアップは不要です。アシスタントは公開 URL 経由でページを取得するため、ページがデプロイされればすぐに機能します。
 
+このアクションを調整するには `ai.openInChat` を設定します。`false` にすると完全に非表示になり、プロバイダーキーの配列（`"v0"`、`"chatgpt"`、`"claude"`、`"t3"`、`"scira"`、`"cursor"`）を指定すると、列挙した順序でそれらのプロバイダーだけが表示されます。
+
+```ts blume.config.ts lineNumbers
+ai: {
+  openInChat: ["claude", "chatgpt", "cursor"],
+}
+```
+
 ページ全体のアクションではなく、コンテンツ内にコピーしてすぐ使えるプロンプトを埋め込みたい場合は、[Prompt コンポーネント](/docs/content/components#prompt)を使ってください。**Copy prompt** ボタンと、任意で Cursor で開くリンクを備えたラベル付きの行をレンダリングします。
 
 ## Ask AI
@@ -137,6 +145,22 @@ ai: {
 
 `label` は実際に送信される質問で、`icon` は任意です。`suggestions` を未設定（または空）のままにすると、パネルはシンプルな入力欄で開きます。
 
+### カスタム指示
+
+`instructions` で独自のシステムプロンプト文を追加できます。アシスタントに意識してほしいアイデンティティ、言語、トーン、その他何でも指定できます。
+
+```ts blume.config.ts lineNumbers
+ai: {
+  ask: {
+    enabled: true,
+    instructions:
+      "You are Bloomy, the Acme docs assistant. Answer in the language the question was asked in, and keep answers under three paragraphs.",
+  },
+}
+```
+
+指定した文は組み込みの指示を置き換えるのではなく、その**後ろに追加**されます。組み込み部分は[グラウンディング](#grounding)の取り決め（取得したページのみから回答する、Markdown リンクとして引用する）を担っており、チャットパネルの引用表示はこれに依存しているため、何を追加しても損なわれずに残ります。
+
 ### グラウンディング
 
 Ask AI は**ドキュメントにグラウンディングされています**。質問ごとに最も関連性の高いページを取得し（ページ内検索を支えるのと同じ字句ベースの [Orama](/docs/configuration/search) インデックスを使用）、モデルのシステムプロンプトに注入するため、回答はモデル自身の知識ではなくあなたのコンテンツから生成されます。アシスタントは、取得したページのみから回答すること、カバーされていない事柄はそう伝えること、参照したページを引用することを指示されています。
@@ -144,6 +168,33 @@ Ask AI は**ドキュメントにグラウンディングされています**。
 読者が現在開いているページが最初にコンテキストへ追加され、そのページの言語に検索範囲を絞るために使われるため、回答はドキュメント内の現在地に沿った内容になります。取得処理はビルドに埋め込まれたスナップショットからリクエスト時に実行されるため、[検索](/docs/configuration/search)プロバイダーに関係なく（検索が `none` に設定されていても）動作し、設定は不要です。
 
 グラウンディングは **[Inkeep](#backends)** 以外のすべてのバックエンドで有効です。Inkeep はダッシュボードでインデックスしたコンテンツに対して独自の取得処理を行います。
+
+### 取得サイズ
+
+1 つの質問がどれだけのドキュメントを運ぶかは、読者が最初の 1 語を待つ時間を左右する最大の要因です。モデルは注入された文字をすべて読んでからトークンを出力し始めます。ホスト型のフロンティアモデルではこれは目に見えませんが、セルフホストのバックエンドでは支配的になります。`retrieval` でそのサイズを調整します。
+
+```ts blume.config.ts lineNumbers
+ai: {
+  ask: {
+    enabled: true,
+    retrieval: {
+      maxResults: 3, // fewer pages retrieved per question
+      excerptChars: 1200, // shorter excerpt from each one
+      contextBudget: 3000, // smaller total injection
+    },
+  },
+}
+```
+
+| オプション      | 既定値  | 説明                                         |
+| --------------- | ------- | -------------------------------------------- |
+| `maxResults`    | `6`     | 質問ごとに取得するドキュメント数。           |
+| `excerptChars`  | `2000`  | 取得した各ページから残す文字数。             |
+| `contextBudget` | `10000` | すべての抜粋を合わせた、注入される総文字数。 |
+
+この 3 つは互いに置き換えられるものではありません。`contextBudget` は注入全体に上限を設け、`excerptChars` は 1 つの長いページのどこまで深く抜粋するかを決め（1 ページに答えのすべてが収まっているのに抜粋が途中で切れてしまう場合に上げてください）、`maxResults` は取得処理が追加するページ数に上限を設けます。読者が閲覧しているページは取得したページに加えて注入されるため、回答は `maxResults` より 1 ページ多く引用することがあります。
+
+既定値はホスト型モデルに適しています。自前のハードウェアから配信していて、再現率よりも最初のトークンまでの時間が重要な場合は、これらを下げてください。いずれの場合も回答はグラウンディングされたままで、アシスタントはカバーされていない事柄について、隙間を埋めるのではなくそう伝えるよう指示されています。
 
 ### 外部エンドポイント
 
@@ -186,15 +237,17 @@ Ask AI が有効で外部 `endpoint` がない静的ビルドは、`deployment.o
 
 既定では、Ask AI は **Vercel AI Gateway** を経由します。`model` は `provider/model` 形式の文字列なので、それを変更するだけでモデルを切り替えられ（`openai/gpt-5.5`、`anthropic/claude-sonnet-4-5` など）、プロバイダーの SDK をインストールする必要はありません。ゲートウェイは環境から `AI_GATEWAY_API_KEY` を読み取り、Vercel にデプロイすると自動的に設定されます。
 
-Ask AI を別の場所に向けるには `provider` を設定します。各バックエンドは環境変数から API キーを読み取り、対応するプロバイダーの SDK はビルド時にプロジェクトのランタイムへ自動的に追加されます。追加されるのは実際に使うものだけです。
+Ask AI を別の場所に向けるには `provider` を設定します。各バックエンドは環境変数から API キーを読み取り、プロジェクトにインストールしたプロバイダーの SDK を通じてストリーミングします。インストールするのは実際に使うものだけです。
 
-| `provider` | `model` | API キーの環境変数 |
-| --- | --- | --- |
-| `gateway`（既定） | AI Gateway 経由の `provider/model` 形式の文字列 | `AI_GATEWAY_API_KEY` |
-| `openrouter` | 任意の [OpenRouter](https://openrouter.ai) モデル | `OPENROUTER_API_KEY` |
-| `llmgateway` | 任意の [LLMGateway](https://llmgateway.io) モデル | `LLMGATEWAY_API_KEY` |
-| `inkeep` | [Inkeep](https://inkeep.com) の QA モデル | `INKEEP_API_KEY` |
-| `openai-compatible` | エンドポイントが提供するもの | `apiKeyEnv` で設定 |
+| `provider` | `model` | API キーの環境変数 | インストールする SDK |
+| --- | --- | --- | --- |
+| `gateway`（既定） | AI Gateway 経由の `provider/model` 形式の文字列 | `AI_GATEWAY_API_KEY` | 不要 — Blume に同梱 |
+| `openrouter` | 任意の [OpenRouter](https://openrouter.ai) モデル | `OPENROUTER_API_KEY` | `@openrouter/ai-sdk-provider` |
+| `llmgateway` | 任意の [LLMGateway](https://llmgateway.io) モデル | `LLMGATEWAY_API_KEY` | `@ai-sdk/openai-compatible` |
+| `inkeep` | [Inkeep](https://inkeep.com) の QA モデル | `INKEEP_API_KEY` | `@ai-sdk/openai-compatible` |
+| `openai-compatible` | エンドポイントが提供するもの | `apiKeyEnv` で設定 | `@ai-sdk/openai-compatible` |
+
+これらの SDK は任意のピア依存関係なので、バックエンドに必要なものをプロジェクトに追加してください（例: `npm install @openrouter/ai-sdk-provider`）。不足している場合は、Vite が import の解決に失敗する前に、ビルドが正確なパッケージ名を添えて警告します。
 
 たとえば OpenRouter を使うには次のようにします。
 
@@ -339,7 +392,21 @@ Link: </agent-readability.json>; rel="describedby"; type="application/json",
   </index.md>; rel="alternate"; type="text/markdown"
 ```
 
-各エントリーは、その機能が有効な場合にのみ現れます。`alternate` リンクはホームページの Markdown ミラーを指します。ホームのルートがコンテンツページであればそのページ自身の[生の Markdown](#raw-markdown)、ランディングページであれば合成された `llms.txt` フォールバックです。API を公開しているサイトには、[生成された API カタログ](#api-catalog)を指す `rel="api-catalog"` エントリーも追加されます。このヘッダーは、Blume が制御するすべての面に付与されます。開発サーバー（`curl -I localhost:4321` で確認できます）、出力される `_headers` ファイル経由の静的ビルド（Netlify と Cloudflare）、そしてデプロイのルーティングルール経由の Vercel サーバービルドです。静的出力で `_headers` を無視するホスト（GitHub Pages、S3）はカスタムのレスポンスヘッダーをまったく送信できませんが、そこでもエージェントはサイトルートの `llms.txt` と `agent-readability.json` からすべてを見つけられます。
+各エントリーは、その機能が有効な場合にのみ現れます。`alternate` リンクはホームページの Markdown ミラーを指します。ホームのルートがコンテンツページであればそのページ自身の[生の Markdown](#raw-markdown)、ランディングページであれば合成された `llms.txt` フォールバックです。API を公開しているサイトには、[生成された API カタログ](#api-catalog)を指す `rel="api-catalog"` エントリーも追加されます。このヘッダーは、Blume が制御するすべての面に付与されます。開発サーバー（`curl -I localhost:4321` で確認できます）、出力される `_headers` ファイル経由の静的ビルド（Netlify と Cloudflare）、そしてデプロイのルーティングルール経由の Vercel サーバービルドです。
+
+とはいえ、すべてのエージェントがルートから入ってくるわけではありません。検索結果や共有リンクをたどってきたエージェントは深い階層のページに着地し、ホームページのヘッダーを目にすることはありません。そこで、レンダリングされるすべてのページも、同じ IANA 登録済みのリレーションを用いて、HTML の `<head>` に同じディスカバリーリンクを備えています。
+
+```html
+<link
+  rel="describedby"
+  href="/agent-readability.json"
+  type="application/json"
+/>
+<link rel="describedby" href="/llms.txt" type="text/plain" />
+<link rel="alternate" href="/docs/example.md" type="text/markdown" />
+```
+
+ここでの `alternate` リンクは*そのページ自身*の[生の Markdown ミラー](#raw-markdown)を指すため、エージェントは着地した HTML からトークン効率の良い版へ直接移動できます。head のリンクはプリレンダリングされた HTML とともに配信されるため、`_headers` を無視しカスタムのレスポンスヘッダーをまったく送信できないホスト（GitHub Pages、S3）でも機能します。エージェントがどのページから入ってきても同じです。
 
 ### API カタログ
 

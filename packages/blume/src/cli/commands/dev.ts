@@ -1,13 +1,13 @@
 import { dev } from "astro";
 import { watch } from "chokidar";
 import { defineCommand } from "citty";
+import { debounce } from "perfect-debounce";
 
 import { generateRuntime } from "../../astro/generate.ts";
 import { showBlumeErrorOverlay } from "../../astro/integration.ts";
 import { scanProject } from "../../core/project-graph.ts";
 import { resolveRuntimeDir } from "../../core/project.ts";
 import { parsePort } from "../args.ts";
-import { coalescedRunner } from "../coalesce.ts";
 import {
   acquireDevLock,
   describeDevLock,
@@ -146,10 +146,16 @@ export const devCommand = defineCommand({
     // watcher misses directory renames, so a renamed page 404s (`getEntry` reads
     // a stale in-memory store) until the server is restarted. We restart it
     // ourselves — stop, regenerate while down (no watcher races), then bring up
-    // a fresh container whose cold sync re-globs everything. `coalescedRunner`
-    // single-flights the scan so a burst of watch events can never stack
-    // overlapping regenerations (piled-up scans exhaust the heap).
-    const runRegenerate = coalescedRunner(async () => {
+    // a fresh container whose cold sync re-globs everything. perfect-debounce
+    // both debounces the watch burst (80ms) and single-flights the scan: a
+    // trigger during a run never starts a second run, only marks one trailing
+    // rerun after the current settles. Both halves are load-bearing — a plain
+    // debounce once let bursts stack overlapping scans until the heap was
+    // exhausted (observed as an OOM after minutes of looping). The contract is
+    // pinned by test/dev-debounce.test.ts. The task must not reject (the
+    // library re-invokes it from an unhandled .finally), so the body catches
+    // its own errors and always resolves.
+    const regenerate = debounce(async () => {
       try {
         const next = await scanProject(root, {
           devServerUrl,
@@ -179,23 +185,17 @@ export const devCommand = defineCommand({
         reportDiagnostics(next.diagnostics, root);
         showBlumeErrorOverlay(next.diagnostics);
       } catch (error) {
+        // SAFETY: regeneration failures come from the generator and Astro's
+        // server API, which raise Error instances; only the message is shown.
         logger.error(`Regeneration failed: ${(error as Error).message}`);
       }
-    });
-
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const regenerate = () => {
-      if (timer) {
-        clearTimeout(timer);
-      }
-      timer = setTimeout(runRegenerate, 80);
-    };
+    }, 80);
 
     // The runtime prepared above baked the *requested* port into the site
     // fallback; if Vite bumped it, regenerate so OG images, canonicals, and
     // other site-gated URLs point at the port actually serving.
     if (boundPort !== port) {
-      void runRegenerate();
+      void regenerate();
     }
 
     // Content is watched per source (filesystem uses fs.watch; remote sources

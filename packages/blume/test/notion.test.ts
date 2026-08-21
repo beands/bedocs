@@ -28,6 +28,17 @@ const rich = (plainText: string, annotations?: Record<string, boolean>) => ({
   plain_text: plainText,
 });
 
+type RichTextFixture = ReturnType<typeof rich>;
+
+/** The property shapes these fixtures store, structurally within the SDK's. */
+interface PropertyFixture {
+  type: string;
+  number?: number;
+  rich_text?: RichTextFixture[];
+  status?: { name: string };
+  title?: RichTextFixture[];
+}
+
 const PAGE = {
   id: "page1",
   last_edited_time: "2024-05-01T00:00:00Z",
@@ -39,7 +50,7 @@ const PAGE = {
   },
 };
 
-const BLOCKS: Record<string, unknown[]> = {
+const BLOCKS = {
   callout1: [
     {
       id: "c-p",
@@ -139,33 +150,37 @@ const BLOCKS: Record<string, unknown[]> = {
   ],
 };
 
-const client = (): NotionClientLike =>
-  ({
-    blocks: {
-      children: {
-        list: ({ block_id }: { block_id: string }) =>
-          Promise.resolve({
-            has_more: false,
-            next_cursor: null,
-            results: BLOCKS[block_id] ?? [],
-          }),
-      },
-    },
-    databases: {
-      query: () =>
+// Keyed by parent block id, like the Notion children API; the Map allows
+// arbitrary string lookups without widening the fixture's inferred shape.
+const blockLists = new Map(Object.entries(BLOCKS));
+
+const client = (): NotionClientLike => ({
+  blocks: {
+    children: {
+      list: ({ block_id }: { block_id: string }) =>
         Promise.resolve({
           has_more: false,
           next_cursor: null,
-          results: [PAGE],
+          results: blockLists.get(block_id) ?? [],
         }),
     },
-  }) as unknown as NotionClientLike;
+  },
+  databases: {
+    query: () =>
+      Promise.resolve({
+        has_more: false,
+        next_cursor: null,
+        results: [PAGE],
+      }),
+  },
+});
 
-const fetchImpl = (() =>
-  Promise.resolve({
-    arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
-    ok: true,
-  })) as unknown as typeof fetch;
+// `typeof fetch` carries the `preconnect` namespace member, so the stub borrows
+// it from the real fetch; the source only ever calls the function itself.
+const fetchImpl: typeof fetch = Object.assign(
+  () => Promise.resolve(new Response(new ArrayBuffer(8))),
+  fetch
+);
 
 const ctxFor = async (): Promise<SourceContext> => {
   const dir = await tempDir();
@@ -218,7 +233,7 @@ describe("notionSource", () => {
           });
         },
       },
-    } as unknown as NotionClientLike;
+    } satisfies NotionClientLike;
 
     const source = notionSource(
       { client: flaky, database: "db1", fetchImpl, name: "handbook" },
@@ -241,7 +256,7 @@ describe("notionSource", () => {
           );
         },
       },
-    } as unknown as NotionClientLike;
+    } satisfies NotionClientLike;
 
     const source = notionSource(
       { client: broken, database: "db1", fetchImpl, name: "handbook" },
@@ -304,7 +319,7 @@ describe("notionSource", () => {
           });
         },
       },
-    } as unknown as NotionClientLike;
+    } satisfies NotionClientLike;
     const source = notionSource(
       {
         client: dynamic,
@@ -356,7 +371,7 @@ describe("notionSource", () => {
             ],
           }),
       },
-    } as unknown as NotionClientLike;
+    } satisfies NotionClientLike;
     const source = notionSource(
       {
         client: draftClient,
@@ -383,7 +398,7 @@ describe("notionSource", () => {
   });
 
   it("defaults publishedValue to Published when unset", async () => {
-    const clientWith = (properties: Record<string, unknown>) =>
+    const clientWith = (properties: Record<string, PropertyFixture>) =>
       ({
         ...client(),
         databases: {
@@ -394,8 +409,8 @@ describe("notionSource", () => {
               results: [{ ...PAGE, properties }],
             }),
         },
-      }) as unknown as NotionClientLike;
-    const loadDraft = async (properties: Record<string, unknown>) => {
+      }) satisfies NotionClientLike;
+    const loadDraft = async (properties: Record<string, PropertyFixture>) => {
       const source = notionSource(
         {
           client: clientWith(properties),
@@ -433,7 +448,7 @@ describe("notionSource (block + property edge cases)", () => {
     },
   };
 
-  const richBlocks: Record<string, unknown[]> = {
+  const richBlocks = {
     rich: [
       { heading_1: { rich_text: [rich("H1")] }, id: "h1", type: "heading_1" },
       { heading_3: { rich_text: [rich("H3")] }, id: "h3", type: "heading_3" },
@@ -479,27 +494,28 @@ describe("notionSource (block + property edge cases)", () => {
     ],
   };
 
-  const richClient = (): NotionClientLike =>
-    ({
-      blocks: {
-        children: {
-          list: ({ block_id }: { block_id: string }) =>
-            Promise.resolve({
-              has_more: false,
-              next_cursor: null,
-              results: richBlocks[block_id] ?? [],
-            }),
-        },
-      },
-      databases: {
-        query: () =>
+  const richBlockLists = new Map(Object.entries(richBlocks));
+
+  const richClient = (): NotionClientLike => ({
+    blocks: {
+      children: {
+        list: ({ block_id }: { block_id: string }) =>
           Promise.resolve({
             has_more: false,
             next_cursor: null,
-            results: [richPage],
+            results: richBlockLists.get(block_id) ?? [],
           }),
       },
-    }) as unknown as NotionClientLike;
+    },
+    databases: {
+      query: () =>
+        Promise.resolve({
+          has_more: false,
+          next_cursor: null,
+          results: [richPage],
+        }),
+    },
+  });
 
   it("renders every leaf block type and inline annotation", async () => {
     const source = notionSource(
@@ -593,17 +609,107 @@ describe("notionSource (block + property edge cases)", () => {
   });
 });
 
+// Pages without a title property slug to their id, so any count is fine.
+const pageStub = (id: string) => ({ id, properties: {} });
+
+describe("notionSource (request pacing)", () => {
+  /**
+   * A client whose block fetches report how many are in flight at once. Each
+   * call parks for a tick so overlapping requests are actually observed
+   * overlapping — with 429 fan-out this is exactly the burst the limiter caps.
+   */
+  const trackingClient = (
+    pageCount: number,
+    onRequest: (inFlight: number) => void
+  ): NotionClientLike => {
+    let inFlight = 0;
+    return {
+      blocks: {
+        children: {
+          list: async () => {
+            inFlight += 1;
+            onRequest(inFlight);
+            await sleep(5);
+            inFlight -= 1;
+            return { has_more: false, next_cursor: null, results: [] };
+          },
+        },
+      },
+      databases: {
+        query: () =>
+          Promise.resolve({
+            has_more: false,
+            next_cursor: null,
+            results: Array.from({ length: pageCount }, (_, i) =>
+              pageStub(`p${i}`)
+            ),
+          }),
+      },
+    };
+  };
+
+  it("bounds concurrent API requests to the default pool of 3", async () => {
+    let peak = 0;
+    const source = notionSource(
+      {
+        client: trackingClient(10, (n) => {
+          peak = Math.max(peak, n);
+        }),
+        database: "db1",
+        fetchImpl,
+        name: "handbook",
+      },
+      await ctxFor()
+    );
+    const { entries } = await source.load();
+    // All ten pages import, but never more than three requests at once.
+    expect(entries).toHaveLength(10);
+    expect(peak).toBe(3);
+  });
+
+  it("honors a configured concurrency", async () => {
+    let peak = 0;
+    const source = notionSource(
+      {
+        client: trackingClient(6, (n) => {
+          peak = Math.max(peak, n);
+        }),
+        concurrency: 1,
+        database: "db1",
+        fetchImpl,
+        name: "handbook",
+      },
+      await ctxFor()
+    );
+    const { entries } = await source.load();
+    expect(entries).toHaveLength(6);
+    expect(peak).toBe(1);
+  });
+});
+
 describe("resolveSources (notion)", () => {
   it("wires a notion config into a staged source", () => {
     const config = blumeConfigSchema.parse({
       content: {
-        sources: [{ database: "db1", prefix: "handbook", type: "notion" }],
+        sources: [
+          {
+            concurrency: 2,
+            database: "db1",
+            prefix: "handbook",
+            type: "notion",
+          },
+        ],
       },
     });
-    const context = {
+    const context: ProjectContext = {
+      componentsFile: null,
+      configFile: null,
+      contentRoot: "/p/docs",
       outDir: "/p/.blume",
+      pagesRoot: null,
       root: "/p",
-    } as ProjectContext;
+      themeFile: null,
+    };
     const sources = resolveSources(config, context, { mode: "build" });
     expect(sources[0]?.name).toBe("handbook");
     expect(sources[0]?.staged).toBe(true);

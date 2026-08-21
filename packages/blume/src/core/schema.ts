@@ -8,12 +8,13 @@ import { normalizeXHandle } from "../seo/x-handle.ts";
 import { FONT_SLUGS, isFontSlug } from "../theme/fonts.ts";
 import { normalizeBasePath } from "./base-path.ts";
 import { uiLocaleOverridesSchema } from "./i18n-ui.ts";
+import { openInChatProviders } from "./open-in-chat.ts";
 import type { ContentSource } from "./sources/types.ts";
 import { isStandardSchema } from "./standard-schema.ts";
 import type { StandardSchema } from "./standard-schema.ts";
 
 /**
- * Public BeDocs schemas.
+ * Public Blume schemas.
  *
  * These are exported from `blume/schema` so migration tools, editor
  * integrations, and the runtime share a single source of validation truth.
@@ -22,6 +23,14 @@ import type { StandardSchema } from "./standard-schema.ts";
 // ---------------------------------------------------------------------------
 // Shared primitives
 // ---------------------------------------------------------------------------
+
+// `typeof` checks live in named predicates (the form the oxlint anti-slop
+// config sanctions); generic so each site keeps its own union narrowing.
+const isString = <Value>(value: Value): value is Value & string =>
+  typeof value === "string";
+
+const isBoolean = <Value>(value: Value): value is Value & boolean =>
+  typeof value === "boolean";
 
 /** Icon inputs in serializable contexts (frontmatter, meta files). */
 const iconName = z.string().min(1);
@@ -40,12 +49,28 @@ const dateSchema = z
   .union([z.string(), z.date()])
   .transform((value) => (value instanceof Date ? value.toISOString() : value));
 
+/**
+ * How a sidebar group renders:
+ * - `flat`: a non-collapsible header with its items listed beneath (default).
+ * - `group`: a collapsible `<details>` disclosure.
+ * - `page`: a single row that drills into a sub-panel showing only this group's
+ *   items, with a back arrow at the top.
+ */
+const sidebarDisplaySchema = z.enum(["flat", "group", "page"]);
+export type SidebarDisplay = z.infer<typeof sidebarDisplaySchema>;
+
 // ---------------------------------------------------------------------------
 // Page frontmatter
 // ---------------------------------------------------------------------------
 
 const sidebarMetaSchema = z.strictObject({
   badge: z.string().optional(),
+  /**
+   * Render mode for this page's folder group. Only meaningful on a folder's
+   * `index` page — it configures the group, not the page. Overrides the
+   * folder's `meta.ts` `display` and the global `navigation.sidebar.display`.
+   */
+  display: sidebarDisplaySchema.optional(),
   hidden: z.boolean().default(false),
   icon: iconName.optional(),
   label: z.string().optional(),
@@ -90,7 +115,7 @@ const changelogMetaSchema = z.strictObject({
 /**
  * A post author: a bare name/handle, or an object with a name plus optional
  * avatar/URL. The object is passthrough so richer author metadata (social
- * handles, roles) survives untouched — BeDocs doesn't render authors yet, so
+ * handles, roles) survives untouched — Blume doesn't render authors yet, so
  * this exists to preserve the field (common on blog/changelog pages) rather
  * than have a strict scan reject it.
  */
@@ -141,6 +166,11 @@ export const pageMetaSchema = pageMetaBaseSchema;
 export type PageMeta = z.infer<typeof pageMetaBaseSchema>;
 export type PageMetaInput = z.input<typeof pageMetaBaseSchema>;
 
+/** Built-in page frontmatter keys; custom keys must never redeclare one. */
+const BUILT_IN_PAGE_META_KEYS = new Set<string>(
+  pageMetaBaseSchema.keyof().options
+);
+
 /**
  * A map of custom frontmatter keys to user-supplied validation schemas,
  * consumed through the Standard Schema `~standard` contract — never Zod's own
@@ -162,7 +192,7 @@ const customKeySchemaRecord = (where: string) =>
     .default({})
     .superRefine((value, ctx) => {
       for (const key of Object.keys(value)) {
-        if (Object.hasOwn(pageMetaBaseSchema.shape, key)) {
+        if (BUILT_IN_PAGE_META_KEYS.has(key)) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: `"${key}" is a built-in frontmatter field and cannot be redeclared via ${where}.`,
@@ -176,18 +206,10 @@ const customKeySchemaRecord = (where: string) =>
 // Folder meta (meta.ts)
 // ---------------------------------------------------------------------------
 
-/**
- * How a sidebar group renders:
- * - `flat`: a non-collapsible header with its items listed beneath (default).
- * - `group`: a collapsible `<details>` disclosure.
- * - `page`: a single row that drills into a sub-panel showing only this group's
- *   items, with a back arrow at the top.
- */
-const sidebarDisplaySchema = z.enum(["flat", "group", "page"]);
-export type SidebarDisplay = z.infer<typeof sidebarDisplaySchema>;
-
 export const folderMetaSchema = z.strictObject({
   collapsed: z.boolean().optional(),
+  /** Render mode for this group; overrides `navigation.sidebar.display`. */
+  display: sidebarDisplaySchema.optional(),
   icon: iconName.optional(),
   order: z.number().optional(),
   /** Explicit child ordering by slug segment (without numeric prefix). */
@@ -198,7 +220,7 @@ export const folderMetaSchema = z.strictObject({
 export type FolderMeta = z.infer<typeof folderMetaSchema>;
 
 // ---------------------------------------------------------------------------
-// Project config (bedocs.config.ts)
+// Project config (blume.config.ts)
 // ---------------------------------------------------------------------------
 
 /** The logo mark: a single image path/URL, or light/dark variants with alt text. */
@@ -283,7 +305,7 @@ const sanitySourceSchema = z.object({
   /** Sanity API version (a date); default `2024-01-01`. */
   apiVersion: z.string().optional(),
   dataset: z.string(),
-  /** Field paths mapping a document onto BeDocs meta + body. */
+  /** Field paths mapping a document onto Blume meta + body. */
   fields: z
     .strictObject({
       body: z.string().optional(),
@@ -304,11 +326,13 @@ const sanitySourceSchema = z.object({
 
 /** A Notion database; pages become entries, blocks become MDX. */
 const notionSourceSchema = z.object({
+  /** Max concurrent Notion API requests; default 3 (Notion's per-integration pace). */
+  concurrency: z.number().positive().optional(),
   database: z.string(),
   /** Opt-in dev polling interval (seconds); omit to freeze for the session. */
   pollInterval: z.number().positive().optional(),
   prefix: z.string().optional(),
-  /** Notion property names mapped onto BeDocs meta. */
+  /** Notion property names mapped onto Blume meta. */
   properties: z
     .strictObject({
       description: z.string().optional(),
@@ -348,16 +372,18 @@ const githubReleasesSourceSchema = z.strictObject({
 
 /**
  * A user-provided `ContentSource` instance, passed straight through from
- * `bedocs.config.ts`. This is the extension point that lets adapters with custom
+ * `blume.config.ts`. This is the extension point that lets adapters with custom
  * serializers (or any backend) ship without their SDKs touching core.
  */
 const customSourceSchema = z.object({
   source: z.custom<ContentSource>(
-    (val) =>
+    (val): val is ContentSource =>
       typeof val === "object" &&
       val !== null &&
-      typeof (val as { load?: unknown }).load === "function" &&
-      typeof (val as { name?: unknown }).name === "string",
+      "load" in val &&
+      typeof val.load === "function" &&
+      "name" in val &&
+      typeof val.name === "string",
     { message: "custom source must be a ContentSource (with name + load)" }
   ),
   type: z.literal("custom"),
@@ -556,7 +582,7 @@ const localFontSchema = z.strictObject({
 const fontValueSchema = z
   .union([z.string(), remoteFontSchema, localFontSchema])
   .superRefine((value, ctx) => {
-    if (typeof value === "string" && !isFontSlug(value)) {
+    if (isString(value) && !isFontSlug(value)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: `Unknown font "${value}". Supported fonts: ${FONT_SLUGS.join(", ")}. For any other family, use the object form: { name: "..." } (remote provider) or { name: "...", variants: [...] } (local files).`,
@@ -579,7 +605,7 @@ const perModeValueSchema = z
   ])
   .optional()
   .transform((value) =>
-    typeof value === "string" ? { dark: value, light: value } : value
+    isString(value) ? { dark: value, light: value } : value
   );
 
 const themeConfigSchema = z.strictObject({
@@ -590,7 +616,7 @@ const themeConfigSchema = z.strictObject({
     ])
     .default("blue")
     .transform((value) =>
-      typeof value === "string" ? { dark: value, light: value } : value
+      isString(value) ? { dark: value, light: value } : value
     ),
   action: z.string().optional(),
   background: perModeValueSchema,
@@ -598,7 +624,7 @@ const themeConfigSchema = z.strictObject({
   fonts: z
     .strictObject({
       body: fontValueSchema.default("inter"),
-      display: fontValueSchema.default("inter-tight"),
+      display: fontValueSchema.default("inter"),
       mono: fontValueSchema.default("ibm-plex-mono"),
     })
     .prefault({}),
@@ -680,6 +706,8 @@ const searchConfigSchema = z
   .superRefine((value, ctx) => {
     // Hosted providers can't work without their credentials; flag a missing
     // block with a path so the diagnostic points at `search.<provider>`.
+    // SAFETY: providers without a config block (orama, pagefind, …) miss the
+    // map and read undefined, which the `field &&` guard below absorbs.
     const field =
       PROVIDER_CONFIG_KEY[value.provider as keyof typeof PROVIDER_CONFIG_KEY];
     if (field && !value[field]) {
@@ -716,7 +744,7 @@ const PRIVATE_JWK_PARAMS = ["d", "p", "q", "dp", "dq", "qi", "oth", "k"];
 const publicJwkSchema = z
   .record(z.string(), z.unknown())
   .superRefine((jwk, ctx) => {
-    if (typeof jwk.kty !== "string" || jwk.kty.length === 0) {
+    if (!isString(jwk.kty) || jwk.kty.length === 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'A JWK must declare its key type ("kty").',
@@ -780,8 +808,25 @@ const aiConfigSchema = z.strictObject({
       // and host Ask AI in an existing backend. Absolute URLs and root-relative
       // paths are both valid; the built-in request/stream contract is unchanged.
       endpoint: askEndpointSchema.optional(),
+      // Extra system-prompt text (identity, language, tone) appended to the
+      // built-in instructions, so the grounding contract — answer from the
+      // retrieved excerpts, cite pages as Markdown links — stays intact.
+      instructions: z.string().trim().min(1).optional(),
       model: z.string().default("openai/gpt-5.5"),
       provider: z.enum(askAiProviders).default("gateway"),
+      // How much documentation each question carries. Injected characters are
+      // the dominant term in time-to-first-token on a self-hosted backend, so
+      // these trade recall for latency. No zod defaults here: only what the
+      // user set reaches the generated (and ejected) endpoint, so omitted
+      // fields keep tracking the installed package's built-in defaults in
+      // `ai/ask-context.ts` instead of pinning today's numbers as literals.
+      retrieval: z
+        .strictObject({
+          contextBudget: z.number().int().positive().optional(),
+          excerptChars: z.number().int().positive().optional(),
+          maxResults: z.number().int().positive().optional(),
+        })
+        .optional(),
       // Empty-state prompts shown before the first question. Each renders as a
       // clickable suggestion; `icon` is an optional Lucide name beside it.
       suggestions: z
@@ -824,7 +869,7 @@ const aiConfigSchema = z.strictObject({
     ])
     .default(true)
     .transform((value) =>
-      typeof value === "boolean" ? { enabled: value, openapi: true } : value
+      isBoolean(value) ? { enabled: value, openapi: true } : value
     ),
   // Serializers for the agent-facing Markdown downlevel (the `.md` mirror,
   // llms-full.txt, MCP get_page), keyed by JSX name. Functions live here —
@@ -836,13 +881,38 @@ const aiConfigSchema = z.strictObject({
   markdownComponents: z
     .record(
       z.string(),
-      z.custom<ComponentMarkdown>((value) => typeof value === "function", {
-        message: "Expected a serializer function.",
-      })
+      z.custom<ComponentMarkdown>(
+        (value): value is ComponentMarkdown => typeof value === "function",
+        {
+          message: "Expected a serializer function.",
+        }
+      )
     )
     .default({}),
   /** Expose the docs as an MCP server for connecting agents. */
   mcp: mcpConfigSchema.prefault({}),
+  /**
+   * The "Open in chat" page action. `true` (the default) lists every
+   * provider, `false` hides the action entirely, and an array of provider
+   * keys shows just that subset, in the given order. Normalized to the
+   * provider list so consumers read a plain array.
+   */
+  openInChat: z
+    .union([
+      z.boolean(),
+      z
+        .array(z.enum(openInChatProviders))
+        .refine((value) => new Set(value).size === value.length, {
+          message: "ai.openInChat must not repeat a provider.",
+        }),
+    ])
+    .default(true)
+    .transform((value) => {
+      if (isBoolean(value)) {
+        return value ? [...openInChatProviders] : [];
+      }
+      return value;
+    }),
   /**
    * Publish Agent Skills for discovery: a directory (resolved against the
    * project root) whose subdirectories each hold a `SKILL.md`. The build
@@ -913,6 +983,8 @@ const navigationConfigSchema = z.strictObject({
 
 export type AskAiProvider = (typeof askAiProviders)[number];
 export type AskAiConfig = NonNullable<z.infer<typeof aiConfigSchema>["ask"]>;
+export { openInChatProviders } from "./open-in-chat.ts";
+export type { OpenInChatProvider } from "./open-in-chat.ts";
 
 // Reader-facing "Export" page action (PDF via print, EPUB via client-side
 // generation). Off by default. Accepts a shorthand boolean to toggle both
@@ -927,7 +999,7 @@ const exportConfigSchema = z
     }),
   ])
   .transform((value) =>
-    typeof value === "boolean" ? { epub: value, pdf: value } : value
+    isBoolean(value) ? { epub: value, pdf: value } : value
   );
 
 /** A configured locale: ISO-ish code plus display metadata for the switcher. */
@@ -945,13 +1017,13 @@ const localeSchema = z.strictObject({
 });
 
 /**
- * Internationalization. Opt-in: when absent, BeDocs is single-locale and behaves
+ * Internationalization. Opt-in: when absent, Blume is single-locale and behaves
  * exactly as before. The default locale lives at the content root; other locales
  * are top-level directories named by `code` (the `dir` parser).
  */
 const i18nConfigSchema = z
   .strictObject({
-    defaultLocale: z.string().default("ru"),
+    defaultLocale: z.string().default("en"),
     /** Locale rendered for a missing translation; `null` disables fallback. */
     fallbackLocale: z.string().nullable().optional(),
     /** Drop the URL prefix for the default locale (`/`, `/fr/…`). Static-safe. */
@@ -981,6 +1053,82 @@ const i18nConfigSchema = z
         message: `i18n.fallbackLocale "${value.fallbackLocale}" must match one of i18n.locales.`,
         path: ["fallbackLocale"],
       });
+    }
+  });
+
+/**
+ * Version ids must start with a letter (`v1.0`, not `1.0`): the id doubles as
+ * the snapshot directory name, and a leading digit would collide with the
+ * numeric-prefix ordering convention (`01-intro.mdx`), which strips `1.0/` to
+ * `0/`. The rest allows word characters, dots, and hyphens — URL-safe as-is.
+ */
+export const VERSION_ID = /^[A-Za-z][\w.-]*$/u;
+
+/** A frozen documentation snapshot: a directory under the content root. */
+const archivedVersionSchema = z.strictObject({
+  /**
+   * The "you're viewing an old version" notice: `true` for the built-in
+   * message, a string for custom copy, `false` to hide it.
+   */
+  banner: z.union([z.boolean(), z.string()]).default(true),
+  /**
+   * Where this version's pages point their canonical URL: `latest` targets the
+   * same page in the current docs when it still exists (self otherwise), so
+   * search engines treat the live page as authoritative without deindexing
+   * version-only content. `self` keeps every page authoritative.
+   */
+  canonical: z.enum(["latest", "self"]).default("latest"),
+  /** Directory name under the content root, and the URL segment. */
+  id: z
+    .string()
+    .regex(
+      VERSION_ID,
+      'Version ids must start with a letter (e.g. "v1.0") and contain only letters, digits, dots, hyphens, and underscores.'
+    ),
+  /** Switcher label; defaults to the id. */
+  label: z.string().optional(),
+  /** Emit `noindex` on every page of this version. */
+  noindex: z.boolean().default(false),
+});
+
+/**
+ * Docs versioning. Opt-in: the latest docs live at the content root with
+ * unprefixed URLs, and each archived version is a frozen snapshot directory
+ * (`content/docs/<id>/`) cut with `bedocs version <id>`. Archived means frozen:
+ * snapshots carry their own translations and are never retranslated.
+ */
+const versionsConfigSchema = z
+  .strictObject({
+    /** Frozen snapshots, newest first — this order is the switcher order. */
+    archived: z.array(archivedVersionSchema).default([]),
+    /** Labels the unprefixed tree (the latest docs) in the switcher. */
+    current: z.strictObject({
+      /** Small tag rendered next to the label (e.g. `Latest`). */
+      badge: z.string().optional(),
+      label: z.string(),
+    }),
+    switcher: z
+      .strictObject({
+        /**
+         * Where switching lands when the page has no equivalent in the target
+         * version: `same-page` goes to the equivalent when it exists (version
+         * root otherwise); `root` always goes to the version root.
+         */
+        redirect: z.enum(["same-page", "root"]).default("same-page"),
+      })
+      .prefault({}),
+  })
+  .superRefine((value, ctx) => {
+    const seen = new Set<string>();
+    for (const [position, version] of value.archived.entries()) {
+      if (seen.has(version.id)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `versions.archived declares "${version.id}" more than once.`,
+          path: ["archived", position, "id"],
+        });
+      }
+      seen.add(version.id);
     }
   });
 
@@ -1228,11 +1376,22 @@ const githubConfigSchema = z.strictObject({
   repo: z.string(),
 });
 
+/** The theme fields the structural code-theme check inspects. */
+interface CodeThemeFields {
+  colors?: unknown;
+  settings?: unknown;
+  tokenColors?: unknown;
+}
+
+/** A non-null, non-array object — the floor for a theme and its `colors` map. */
+const isThemeObject = <Value>(value: Value): value is Value & CodeThemeFields =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 const codeThemeSchema = z.custom<CodeTheme>((value) => {
-  if (typeof value === "string") {
+  if (isString(value)) {
     return true;
   }
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (!isThemeObject(value)) {
     return false;
   }
   // Token rules live in `settings` (Shiki's canonical field, also the TextMate
@@ -1240,20 +1399,15 @@ const codeThemeSchema = z.custom<CodeTheme>((value) => {
   // VS Code spelling Shiki falls back to). A colors-only theme (editor fg/bg,
   // no token rules) is also valid — Shiki renders it from `colors` alone. Each
   // field present must have the right shape, and at least one must be present.
-  const theme = value as Record<string, unknown>;
   const settingsValid =
-    theme.settings === undefined || Array.isArray(theme.settings);
+    value.settings === undefined || Array.isArray(value.settings);
   const tokenColorsValid =
-    theme.tokenColors === undefined || Array.isArray(theme.tokenColors);
-  const colorsValid =
-    theme.colors === undefined ||
-    (typeof theme.colors === "object" &&
-      theme.colors !== null &&
-      !Array.isArray(theme.colors));
+    value.tokenColors === undefined || Array.isArray(value.tokenColors);
+  const colorsValid = value.colors === undefined || isThemeObject(value.colors);
   const hasContent =
-    theme.settings !== undefined ||
-    theme.tokenColors !== undefined ||
-    theme.colors !== undefined;
+    value.settings !== undefined ||
+    value.tokenColors !== undefined ||
+    value.colors !== undefined;
   return settingsValid && tokenColorsValid && colorsValid && hasContent;
 }, "Expected a Shiki theme name or custom theme object");
 
@@ -1292,7 +1446,7 @@ const examplesConfigSchema = z
     }),
   ])
   .transform((value): { css?: string; source: string } =>
-    typeof value === "string" ? { source: value } : value
+    isString(value) ? { source: value } : value
   );
 
 /**
@@ -1392,7 +1546,8 @@ const reactConfigSchema = z.strictObject({
 
 /**
  * A single spec rendered by the API reference. `spec` is a local path or an
- * `http(s)` URL (OpenAPI for the BeDocs renderer; OpenAPI or AsyncAPI for Scalar).
+ * `http(s)` URL (an OpenAPI document under `openapi`, an AsyncAPI document
+ * under `asyncapi`).
  */
 const openapiSourceSchema = z.strictObject({
   /** Include generated pages from this spec in llms.txt/llms-full.txt. */
@@ -1413,53 +1568,87 @@ export type OpenApiSource = z.input<typeof openapiSourceSchema>;
 
 /**
  * Arbitrary Scalar API-reference options forwarded verbatim to the generated
- * `<ScalarComponent>` (Scalar renderer only). A passthrough map — BeDocs doesn't
+ * `<ScalarComponent>` (Scalar renderer only). A passthrough map — Blume doesn't
  * mirror Scalar's full config surface — so keys like `localization`, `agent`,
  * `hideTestRequestButton`, or `orderSchemaPropertiesBy` all flow through. These
- * take precedence over BeDocs's own derived config (spec, theme), so this is a
+ * take precedence over Blume's own derived config (spec, theme), so this is a
  * full escape hatch; the dedicated `theme` field is the ergonomic shorthand.
  */
 const scalarConfigSchema = z.record(z.string(), z.unknown()).optional();
 
 /**
- * OpenAPI reference. By default (`renderer: "blume"`) BeDocs parses the spec with
+ * The shared shape of both API-reference blocks — only the mount route and
+ * code-sample defaults differ per spec kind, so each block declares just
+ * those.
+ */
+const referenceConfigSchema = (defaults: {
+  codeSamples: string[];
+  route: string;
+}) =>
+  z.strictObject({
+    /** Code-sample languages/tools shown per operation (Blume renderer). */
+    codeSamples: z.array(z.string()).default(defaults.codeSamples),
+    enabled: z.boolean().default(false),
+    /** Start nested schema rows expanded rather than collapsed (Blume renderer). */
+    expandSchemas: z.boolean().default(false),
+    /**
+     * The interactive "Try it" panel on operation pages (Blume renderer). On by
+     * default; `false` hides it. The object form keeps it on and sets `proxy`,
+     * the CORS escape hatch the OpenAPI Send button routes requests through: a
+     * proxy URL, or `true` for the built-in `/_api-proxy` endpoint (which
+     * requires `deployment.output: "server"`). Booleans normalize to the object
+     * shape so consumers read `{ enabled, proxy }` directly. `proxy` is
+     * OpenAPI-only — an event composer's WebSocket connect is direct.
+     */
+    playground: z
+      .union([
+        z.boolean(),
+        z.strictObject({
+          enabled: z.boolean().default(true),
+          proxy: z.union([z.boolean(), z.string()]).default(false),
+        }),
+      ])
+      .default(true)
+      .transform((value) =>
+        isBoolean(value) ? { enabled: value, proxy: false } : value
+      ),
+    /** Who renders the reference: Blume's own UI, or the embedded Scalar SPA. */
+    renderer: z.enum(["blume", "scalar"]).default("blume"),
+    /** Where the reference mounts. */
+    route: z.string().default(defaults.route),
+    /** Extra Scalar config forwarded to `<ScalarComponent>` (Scalar renderer only). */
+    scalar: scalarConfigSchema,
+    /** One or more specs; each renders on its own route by default. */
+    sources: z.array(openapiSourceSchema).default([]),
+    /** Shorthand for a single source: `sources: [{ spec }]`. */
+    spec: z.string().optional(),
+    /** Scalar theme name (Scalar renderer only). */
+    theme: z.string().optional(),
+  });
+
+/**
+ * OpenAPI reference. By default (`renderer: "blume"`) Blume parses the spec with
  * Scalar's parser and renders its own UI: one real page per operation, grouped
  * by tag in the sidebar and included in site search, llms.txt, and OG. Set
  * `renderer: "scalar"` to fall back to the embedded Scalar SPA (a single
  * self-contained route that doesn't weave into the sidebar or search).
  */
-const openapiConfigSchema = z.strictObject({
-  /** Code-sample languages shown per operation (BeDocs renderer). */
-  codeSamples: z.array(z.string()).default(["curl", "js", "python"]),
-  enabled: z.boolean().default(false),
-  /** Start nested schema rows expanded rather than collapsed (BeDocs renderer). */
-  expandSchemas: z.boolean().default(false),
-  /** Who renders the reference: BeDocs's own UI, or the embedded Scalar SPA. */
-  renderer: z.enum(["blume", "scalar"]).default("blume"),
-  /** Where the reference mounts. */
-  route: z.string().default("/reference"),
-  /** Extra Scalar config forwarded to `<ScalarComponent>` (Scalar renderer only). */
-  scalar: scalarConfigSchema,
-  /** One or more specs; each renders on its own route by default. */
-  sources: z.array(openapiSourceSchema).default([]),
-  /** Shorthand for a single source: `sources: [{ spec }]`. */
-  spec: z.string().optional(),
-  /** Scalar theme name (Scalar renderer only). */
-  theme: z.string().optional(),
+const openapiConfigSchema = referenceConfigSchema({
+  codeSamples: ["curl", "js", "python"],
+  route: "/reference",
 });
 
 /**
- * AsyncAPI reference. Same shape and Scalar pipeline as {@link openapiConfigSchema}
- * (Scalar auto-detects the document type); only the default `route` differs.
+ * AsyncAPI reference. Same shape as {@link openapiConfigSchema}: by default
+ * (`renderer: "blume"`) Blume normalizes the spec to AsyncAPI 3.x and renders
+ * its own UI — one real page per operation — with `renderer: "scalar"` as the
+ * embedded-SPA opt-out. Only the defaults differ: the reference mounts at
+ * `/events`, and empty `codeSamples` means every tool the operation's protocol
+ * binding suggests.
  */
-const asyncapiConfigSchema = z.strictObject({
-  enabled: z.boolean().default(false),
-  route: z.string().default("/events"),
-  /** Extra Scalar config forwarded to `<ScalarComponent>`. */
-  scalar: scalarConfigSchema,
-  sources: z.array(openapiSourceSchema).default([]),
-  spec: z.string().optional(),
-  theme: z.string().optional(),
+const asyncapiConfigSchema = referenceConfigSchema({
+  codeSamples: [],
+  route: "/events",
 });
 
 /**
@@ -1494,7 +1683,7 @@ const tocConfigSchema = z
   ])
   .default(true)
   .transform((value) => {
-    if (typeof value === "boolean") {
+    if (isBoolean(value)) {
       return { enabled: value, maxLevel: 3, minLevel: 2 };
     }
     return {
@@ -1562,8 +1751,26 @@ export const blumeConfigSchema = z
     theme: themeConfigSchema.prefault({}),
     title: z.string().default("Documentation"),
     toc: tocConfigSchema,
+    versions: versionsConfigSchema.optional(),
   })
   .superRefine((config, ctx) => {
+    // A version id that is also a configured locale code would make a leading
+    // `<id>/` directory ambiguous between the two axes — refuse it outright so
+    // detection order (version first, then locale) never has to guess.
+    if (config.versions && config.i18n) {
+      const localeCodes = new Set(
+        config.i18n.locales.map((locale) => locale.code.toLowerCase())
+      );
+      for (const [position, version] of config.versions.archived.entries()) {
+        if (localeCodes.has(version.id.toLowerCase())) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Version id "${version.id}" is also a configured locale code — rename the version (e.g. "v${version.id}").`,
+            path: ["versions", "archived", position, "id"],
+          });
+        }
+      }
+    }
     // A custom key is declared site-wide (`frontmatter.extend`) or per-type
     // (`content.types`), never both — two schemas for one key would make
     // precedence on pages of that type ambiguous.
@@ -1607,6 +1814,10 @@ export type FrontmatterExtend = Record<string, StandardSchema>;
 export type ResolvedI18nConfig = z.infer<typeof i18nConfigSchema>;
 /** A configured locale with display metadata. */
 export type LocaleConfig = z.infer<typeof localeSchema>;
+/** Resolved versions block (present only when the project opts into versioning). */
+export type ResolvedVersionsConfig = z.infer<typeof versionsConfigSchema>;
+/** A configured archived (frozen) version. */
+export type ArchivedVersionConfig = z.infer<typeof archivedVersionSchema>;
 /**
  * User-authored config, straight off the schema. The public, hand-documented
  * authoring type is `BlumeConfig` in `./config-input.ts`, which a compile-time

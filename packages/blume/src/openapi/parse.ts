@@ -1,10 +1,15 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 
+import type { AsyncAPIDocument as ConverterDocument } from "@asyncapi/converter";
+import { convert } from "@asyncapi/converter";
 import { normalize, upgrade } from "@scalar/openapi-parser";
+import pRetry, { AbortError } from "p-retry";
 import { isAbsolute, join } from "pathe";
 
 import { hashText } from "../core/sources/cache.ts";
+import type { AsyncApiDocument } from "./asyncapi.ts";
+import { normalizeAsyncApiDocument } from "./asyncapi.ts";
 import type { ApiDocument } from "./model.ts";
 
 /**
@@ -95,13 +100,23 @@ const ensureProxyDispatcher = async (): Promise<void> => {
   }
 };
 
-/** `Retry-After` in ms when the server sent a sane one, else undefined. */
+/**
+ * `Retry-After` in ms when the server sent a sane one, else undefined. RFC
+ * 9110 allows both forms: delta-seconds (`120`) and an HTTP-date (`Wed, 21
+ * Oct 2015 07:28:00 GMT`); the date form arrives from CDN rate limiters and
+ * was previously ignored.
+ */
 const retryAfterMs = (response: Response): number | undefined => {
   const header = response.headers.get("retry-after");
-  const seconds = header ? Number(header) : Number.NaN;
-  return Number.isFinite(seconds) && seconds > 0
-    ? seconds * SECOND_MS
-    : undefined;
+  if (!header) {
+    return undefined;
+  }
+  const seconds = Number(header);
+  if (Number.isFinite(seconds)) {
+    return seconds > 0 ? seconds * SECOND_MS : undefined;
+  }
+  const delta = Date.parse(header) - Date.now();
+  return Number.isFinite(delta) && delta > 0 ? delta : undefined;
 };
 
 /** One fetch attempt, normalized: the body text, or a (maybe-retryable) error. */
@@ -137,33 +152,65 @@ const attemptFetch = async (spec: string): Promise<Attempt> => {
   }
 };
 
+/**
+ * A retryable failure, wrapped in a plain Error p-retry never special-cases:
+ * it refuses to retry a non-network `TypeError`, and the underlying error's
+ * type is the server's choice, not ours. The message is the underlying
+ * error's, so the exhaustion throw still reads `spec -> 503 Service
+ * Unavailable`.
+ */
+type RetryableFetchError = Error & { retryAfter?: number };
+
+const retryableFetchError = (
+  error: Error,
+  retryAfter?: number
+): RetryableFetchError => {
+  const wrapper: RetryableFetchError = new Error(error.message, {
+    cause: error,
+  });
+  wrapper.name = "RetryableFetchError";
+  wrapper.retryAfter = retryAfter;
+  return wrapper;
+};
+
 /** Fetch a remote spec's text, retrying transient failures with backoff. */
 const fetchSpecText = async (spec: string): Promise<string> => {
   await ensureProxyDispatcher();
-  let last: Attempt = {
-    error: new Error(`Could not fetch ${spec}`),
-    retryable: false,
-  };
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
-    // oxlint-disable-next-line no-await-in-loop -- sequential retry attempts
-    last = await attemptFetch(spec);
-    if ("text" in last) {
-      return last.text;
+  return await pRetry(
+    async () => {
+      const attempt = await attemptFetch(spec);
+      if ("text" in attempt) {
+        return attempt.text;
+      }
+      if (!attempt.retryable) {
+        // AbortError stops retrying and rethrows the original untouched.
+        throw new AbortError(attempt.error);
+      }
+      throw retryableFetchError(attempt.error, attempt.retryAfter);
+    },
+    {
+      factor: 2,
+      maxTimeout: MAX_RETRY_WAIT_MS,
+      minTimeout: BASE_BACKOFF_MS,
+      // A sane `Retry-After` replaces the exponential backoff rather than
+      // stacking on it: p-retry's own (capped) delay still runs after this
+      // hook, so only the difference is slept here.
+      onFailedAttempt: async (context) => {
+        // SAFETY: every retryable throw above is a RetryableFetchError; any
+        // other error reaching this hook reads an absent retryAfter.
+        const { retryAfter } = context.error as RetryableFetchError;
+        if (retryAfter !== undefined && context.retriesLeft > 0) {
+          await sleep(
+            Math.max(
+              0,
+              Math.min(retryAfter, MAX_RETRY_WAIT_MS) - context.retryDelay
+            )
+          );
+        }
+      },
+      retries: MAX_ATTEMPTS - 1,
     }
-    if (!last.retryable) {
-      break;
-    }
-    if (attempt < MAX_ATTEMPTS - 1) {
-      // oxlint-disable-next-line no-await-in-loop -- back off before retrying
-      await sleep(
-        Math.min(
-          last.retryAfter ?? BASE_BACKOFF_MS * 2 ** attempt,
-          MAX_RETRY_WAIT_MS
-        )
-      );
-    }
-  }
-  throw last.error;
+  );
 };
 
 const cacheFileFor = (cacheDir: string, spec: string): string =>
@@ -224,6 +271,8 @@ const readSpecText = async (
     if (cacheFile) {
       const cached = await readCache(cacheFile);
       if (cached !== undefined) {
+        // SAFETY: fetchSpecText throws only Error instances — attemptFetch
+        // wraps every non-Error throw in an Error.
         return {
           text: cached,
           warnings: [
@@ -242,6 +291,14 @@ const readSpecText = async (
  * diagnostic (an error in build, a warning in dev) rather than a hard failure so
  * a broken spec doesn't take down the whole build.
  */
+/**
+ * A parsed mapping is the only shape the renderer can treat as a document:
+ * `normalize` yields undefined for anything that isn't a YAML/JSON mapping
+ * (empty file, scalar, list) and `upgrade(undefined)` a null specification.
+ */
+const isApiDocument = <Value>(value: Value): value is Value & ApiDocument =>
+  typeof value === "object" && value !== null;
+
 export const parseSpec = async (
   spec: string,
   root: string,
@@ -250,13 +307,89 @@ export const parseSpec = async (
   const { text, warnings } = await readSpecText(spec, root, options);
   const normalized = normalize(text);
   const { specification } = upgrade(normalized);
-  // `normalize` yields undefined for anything that isn't a YAML/JSON mapping
-  // (empty file, scalar, list) and `upgrade(undefined)` yields a null
-  // specification — reject it here so the renderer never sees a non-document.
-  if (specification === null || typeof specification !== "object") {
+  // Reject a non-mapping here so the renderer never sees a non-document.
+  if (!isApiDocument(specification)) {
     throw new InvalidSpecError(
       `${spec} is not a valid OpenAPI document (expected a YAML or JSON object).`
     );
   }
-  return { document: specification as ApiDocument, warnings };
+  return { document: specification, warnings };
+};
+
+export interface ParsedAsyncApiSpec {
+  document: AsyncApiDocument;
+  warnings: string[];
+}
+
+/**
+ * Read and normalize a spec to an AsyncAPI 3.x document — the AsyncAPI mirror
+ * of {@link parseSpec}. 1.x/2.x documents are lifted to 3.0 with the official
+ * `@asyncapi/converter` (channels + operations with `send`/`receive` actions),
+ * so the extractor and components only ever handle one shape; `$ref`s stay
+ * intact, matching the OpenAPI path. Error semantics match `parseSpec`: an
+ * unreadable spec throws, a readable non-AsyncAPI document throws
+ * {@link InvalidSpecError}, and callers lower both into source diagnostics.
+ */
+/**
+ * An object carrying a non-empty `asyncapi` version string — the only input
+ * the converter and extractor can key on. `normalize` yields undefined for
+ * non-mapping input, which fails the object check here.
+ */
+const isAsyncApiDocument = <Value>(
+  value: Value
+): value is Value & AsyncApiDocument & { asyncapi: string } =>
+  typeof value === "object" &&
+  value !== null &&
+  "asyncapi" in value &&
+  typeof value.asyncapi === "string" &&
+  value.asyncapi !== "";
+
+export const parseAsyncApiSpec = async (
+  spec: string,
+  root: string,
+  options: SpecFetchOptions = {}
+): Promise<ParsedAsyncApiSpec> => {
+  const { text, warnings } = await readSpecText(spec, root, options);
+  const normalized = normalize(text);
+  if (!isAsyncApiDocument(normalized)) {
+    throw new InvalidSpecError(
+      `${spec} is not a valid AsyncAPI document (expected a YAML or JSON object with an \`asyncapi\` version field).`
+    );
+  }
+  const version = normalized.asyncapi;
+  let document: AsyncApiDocument = normalized;
+  if (!version.startsWith("3.")) {
+    // The converter reports lossy conversions (e.g. a 2.x parameter schema
+    // that 3.0 can't express) through console.warn — capture those as spec
+    // warnings instead of letting them leak into CLI output.
+    const captured: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      captured.push(args.map(String).join(" "));
+    };
+    try {
+      // SAFETY: the converter accepts any pre-3.0 AsyncAPI object and returns
+      // the 3.0 shape the extractor consumes; the two packages just declare
+      // the document type differently.
+      document = convert(
+        document as ConverterDocument,
+        "3.0.0"
+      ) as AsyncApiDocument;
+    } catch (error) {
+      // An unconvertible document (say, an unknown `asyncapi` version) is a
+      // content problem, not a network one — same class as a non-document.
+      // SAFETY: @asyncapi/converter throws Error instances for bad input.
+      throw new InvalidSpecError(
+        `${spec} could not be converted to AsyncAPI 3.0 (${(error as Error).message}).`
+      );
+    } finally {
+      console.warn = originalWarn;
+    }
+    warnings.push(
+      ...captured.map(
+        (message) => `Converting ${spec} to AsyncAPI 3.0: ${message}`
+      )
+    );
+  }
+  return { document: normalizeAsyncApiDocument(document), warnings };
 };

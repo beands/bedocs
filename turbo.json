@@ -1,7 +1,8 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "stream",
-  "globalPassThroughEnv": ["BLUME_RUNTIME_DIR"],
+  "globalPassThroughEnv": ["BEDOCS_RUNTIME_DIR"],
+  "envMode": "loose",
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

@@ -3,11 +3,7 @@ import { existsSync } from "node:fs";
 import { defineCommand } from "citty";
 import { join } from "pathe";
 
-import {
-  AGENTS,
-  launchAgent,
-  WINDOWS_COMMAND_NOT_FOUND,
-} from "../../audit/agent.ts";
+import { AGENTS, launchAgent } from "../../audit/agent.ts";
 import type { AgentKind } from "../../audit/agent.ts";
 import { BlumeError } from "../../core/diagnostics.ts";
 import { scanProject } from "../../core/project-graph.ts";
@@ -37,30 +33,33 @@ const DEFAULT_TIMEOUT_S = 180;
 const isAgentKind = (value: string): value is AgentKind => value in AGENTS;
 
 /**
- * Launch the interactive agent CLI, translating a missing executable into the
- * Windows not-found sentinel. Only `ENOENT` means "not installed" — any other
- * spawn failure (`EACCES`, `EMFILE`, …) must surface as itself.
+ * Launch the interactive agent CLI, turning a missing executable into the
+ * install hint. Only `ENOENT` means "not installed" — any other spawn failure
+ * (`EACCES`, `EMFILE`, …) must surface as itself.
  */
-const launchAgentCode = async (
-  bin: string,
-  prompt: string
-): Promise<number> => {
-  try {
-    return await launchAgent(bin, prompt);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") {
-      throw error;
-    }
-    return WINDOWS_COMMAND_NOT_FOUND;
-  }
-};
-
 const notInstalled = (agent: AgentKind): never => {
   const cli = AGENTS[agent];
   logger.error(
     `${cli.name} (\`${cli.bin}\`) was not found on PATH. Install it with \`${cli.install}\`.`
   );
   return process.exit(1);
+};
+
+const launchAgentCode = async (
+  agent: AgentKind,
+  prompt: string
+): Promise<number> => {
+  try {
+    return await launchAgent(AGENTS[agent].bin, prompt);
+  } catch (error) {
+    // SAFETY: only the `code` tag is inspected; a spawn failure throws an
+    // ErrnoException, and any other thrown value fails the comparison and
+    // rethrows unchanged.
+    if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") {
+      throw error;
+    }
+    return notInstalled(agent);
+  }
 };
 
 /** The fraction of run (non-skipped) questions that passed. */
@@ -80,9 +79,7 @@ interface EvalFlags {
 }
 
 /** Validate the flag surface, exiting with a message on the first offense. */
-const parseFlags = (
-  args: EvalFlags
-): { agent: AgentKind; threshold: number; timeoutS: number } => {
+const parseFlags = (args: EvalFlags) => {
   if (!isAgentKind(args.agent)) {
     logger.error(`Invalid --agent "${args.agent}" (use claude | codex).`);
     process.exit(1);
@@ -125,10 +122,7 @@ const runFixHandoff = async (
   process.stderr.write(
     `  Handing ${count} failed question${count === 1 ? "" : "s"} to ${cli.name}…\n\n`
   );
-  const code = await launchAgentCode(cli.bin, evalFixPrompt(report));
-  if (code === WINDOWS_COMMAND_NOT_FOUND) {
-    notInstalled(agent);
-  }
+  const code = await launchAgentCode(agent, evalFixPrompt(report));
   if (code !== 0) {
     process.exit(code);
   }
@@ -143,10 +137,7 @@ const runInit = async (agent: AgentKind, file: string): Promise<void> => {
     );
     process.exit(1);
   }
-  const code = await launchAgentCode(AGENTS[agent].bin, initPrompt(file));
-  if (code === WINDOWS_COMMAND_NOT_FOUND) {
-    notInstalled(agent);
-  }
+  const code = await launchAgentCode(agent, initPrompt(file));
   if (code !== 0) {
     process.exit(code);
   }
@@ -247,6 +238,9 @@ export const evalCommand = defineCommand({
         logger.error(error.diagnostic.message);
         process.exit(1);
       }
+      // SAFETY: only the `code` tag is inspected; a spawn failure throws an
+      // ErrnoException, and any other thrown value fails the comparison and
+      // falls through to the internal-error report.
       if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {
         notInstalled(agent);
       }

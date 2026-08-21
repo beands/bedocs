@@ -43,11 +43,13 @@ describe("catalog", () => {
 
   it("derives a docs anchor from the id", () => {
     expect(checkDocsUrl("BLUME_AUDIT_TITLE_MISSING")).toBe(
-      "https://useblume.dev/docs/reference/audit#title-missing"
+      "https://github.com/beands/bedocs/docs/reference/audit#title-missing"
     );
   });
 
   it("throws on an id that is not in the catalog", () => {
+    // SAFETY: deliberately smuggles an id outside the catalog union past the
+    // compiler to exercise the runtime throw.
     expect(() => checkMeta("BLUME_AUDIT_NOPE" as never)).toThrow(
       "Unknown audit check"
     );

@@ -5,7 +5,7 @@
 // place. Unlike the theme-aware browser mock it is always dark, like a real
 // terminal, so its colors are fixed rather than design tokens. Transcripts are
 // data (lines of colored segments), mirroring the CLI's actual output — the
-// prompts from `blume init`, consola's ✔ lines, and the audit report format.
+// prompts from `bedocs init`, consola's ✔ lines, and the audit report format.
 interface Props {
   kind: string;
 }
@@ -64,16 +64,16 @@ const terminals: Record<
       cmd("npx blume init"),
       ok("Scaffolded my-docs"),
       blank,
-      cmd("blume dev"),
+      cmd("bedocs dev"),
       [
         { c: "bold", t: "  Local  " },
         { c: "fix", t: "http://localhost:3000/" },
       ],
       blank,
-      cmd("blume build --budget-js 120"),
+      cmd("bedocs build --budget-js 120"),
       ok("Built to dist — 40.3 kB JS, under budget"),
       blank,
-      cmd("blume audit"),
+      cmd("bedocs audit"),
       ok("No issues found."),
     ],
   },
@@ -81,16 +81,16 @@ const terminals: Record<
   // commands with their one-line success summaries.
   home: {
     lines: [
-      cmd("blume validate"),
+      cmd("bedocs validate"),
       ok("128 link(s) checked — no broken links"),
       blank,
-      cmd("blume audit"),
+      cmd("bedocs audit"),
       ok("No issues found."),
       blank,
-      cmd("blume eval"),
+      cmd("bedocs eval"),
       ok("12 passed · 0 failed · 0 skipped"),
       blank,
-      cmd("blume translate --check"),
+      cmd("bedocs translate --check"),
       ok("132 translation(s) up to date"),
     ],
   },
@@ -112,7 +112,7 @@ const terminals: Record<
   },
   dev: {
     lines: [
-      cmd("blume dev"),
+      cmd("bedocs dev"),
       ok("Generated runtime — 24 pages"),
       ok("Indexed 24 page(s) for search"),
       blank,
@@ -140,7 +140,7 @@ const terminals: Record<
   },
   build: {
     lines: [
-      cmd("blume build --analyze --budget-js 120"),
+      cmd("bedocs build --analyze --budget-js 120"),
       ok("Built 24 page(s) — static output"),
       ok("Generated sitemap.xml and robots.txt"),
       ok("Generated agent-readability.json"),
@@ -165,7 +165,7 @@ const terminals: Record<
   },
   checkup: {
     lines: [
-      cmd("blume validate"),
+      cmd("bedocs validate"),
       [
         { c: "err", t: "✖ " },
         { c: "out", t: "content/docs/guides/intro.mdx:12" },
@@ -179,19 +179,19 @@ const terminals: Record<
       blank,
       dim("1 error(s), 1 warning(s)"),
       blank,
-      cmd("blume check"),
+      cmd("bedocs check"),
       ok("No type errors."),
       blank,
-      cmd("blume doctor"),
+      cmd("bedocs doctor"),
       ok("No problems found."),
     ],
   },
   eject: {
     lines: [
-      cmd("blume add accordion"),
+      cmd("bedocs add accordion"),
       ok("Added components/accordion.astro"),
       blank,
-      cmd("blume eject"),
+      cmd("bedocs eject"),
       [
         { c: "out", t: "This promotes .blume/ into a standalone Astro app you own. Continue? " },
         { c: "ask", t: "yes" },
@@ -208,7 +208,7 @@ const terminals: Record<
   // fix pointer anchoring the failure to a source page, and the totals.
   eval: {
     lines: [
-      cmd("blume eval"),
+      cmd("bedocs eval"),
       blank,
       [
         { c: "bold", t: "  blume eval  " },
@@ -250,7 +250,7 @@ const terminals: Record<
   // translate run retranslates exactly that page per locale, nothing else.
   translate: {
     lines: [
-      cmd("blume translate --check"),
+      cmd("bedocs translate --check"),
       blank,
       [
         { c: "err", t: "  ✖ " },
@@ -265,7 +265,7 @@ const terminals: Record<
       blank,
       [{ c: "out", t: "  2 stale · 130 up to date" }],
       blank,
-      cmd("blume translate --claude"),
+      cmd("bedocs translate --claude"),
       blank,
       [
         { c: "bold", t: "  blume translate  " },
@@ -303,7 +303,7 @@ const terminals: Record<
       title: ">_ OpenAI Codex (v0.144.3)",
     },
     lines: [
-      cmd("blume audit --codex"),
+      cmd("bedocs audit --codex"),
       blank,
       [
         { c: "bold", t: "  blume audit  " },
@@ -314,7 +314,7 @@ const terminals: Record<
       [{ c: "out", t: "  Handing 91 findings to Codex…" }],
     ],
     prompt: [
-      ["Fix the issues found by `blume audit` in this project."],
+      ["Fix the issues found by `bedocs audit` in this project."],
       [
         "The full audit report is at report.json. It is JSON: each entry in `diagnostics` is one finding, with the check `code`, a `message` explaining what is wrong, the affected page `url`, the source `file` to edit (relative to the current directory, with a `line` when the finding points at a specific front matter key), and a `suggestion` describing the fix.",
       ],
@@ -325,7 +325,7 @@ const terminals: Record<
         "3. Never fix a finding by deleting a page, removing content, or hiding it from the audit; if a finding genuinely needs a human decision, leave it and say so in your summary.",
       ],
       [
-        "When you are done, run `blume build` and then `blume audit` to verify, and repeat until the audit reports no issues.",
+        "When you are done, run `bedocs build` and then `bedocs audit` to verify, and repeat until the audit reports no issues.",
       ],
     ],
   },

@@ -1,24 +1,14 @@
 ---
 import { createSatteriMarkdownProcessor } from "@astrojs/markdown-satteri";
 
+import { escapeRawHtml, unwrapParagraph } from "./inline-markdown.ts";
+
 interface Props {
   caption?: string;
   hint?: string;
 }
 
 const { caption, hint } = Astro.props;
-
-const escapeRawHtml = (value: string): string =>
-  value.replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-
-const unwrapParagraph = (html: string): string => {
-  const trimmed = html.trim();
-  // Only a *single* paragraph is unwrapped: the content must not contain its
-  // own `</p>`, or `<p>a</p>\n<p>b</p>` would "unwrap" to `a</p>\n<p>b` —
-  // unbalanced HTML injected via set:html.
-  const match = trimmed.match(/^<p>(?<content>(?:(?!<\/p>)[\s\S])*)<\/p>$/u);
-  return match?.groups?.content ?? trimmed;
-};
 
 const markdownProcessor = await createSatteriMarkdownProcessor();
 const captionHtml = caption

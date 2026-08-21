@@ -1,11 +1,12 @@
 ---
-import PageLayout from "blume/components/layout/PageLayout.astro";
+import PageLayout from "@beands/bedocs/components/layout/PageLayout.astro";
 import data from "blume:data";
-import { getBlumeCollection } from "blume/runtime";
+import { getBlumeCollection } from "@beands/bedocs/runtime";
 
 export const prerender = false;
 
 const { config } = data;
+const adminUrl = import.meta.env.PUBLIC_BEDOCS_ADMIN_URL ?? "/admin";
 
 const projectRoutes = getBlumeCollection(data, { prefix: "/projects" });
 
@@ -14,7 +15,7 @@ const projects = projectRoutes
   .map((route) => ({
     title: route.title,
     path: route.path,
-    description: route.description || "",
+    description: "",
   }));
 ---
 
@@ -39,7 +40,7 @@ const projects = projectRoutes
       <p style="font-size: 1.125rem; color: var(--gray-500); max-width: 600px; margin: 0 auto 24px;">
         {config.description}
       </p>
-      <a href="http://192.168.0.101:3001" target="_blank" style="display: inline-block; padding: 10px 24px; background: #14b8a6; color: white; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 500;">
+      <a href={adminUrl} style="display: inline-block; padding: 10px 24px; background: #14b8a6; color: white; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 500;">
         + Создать проект документации
       </a>
     </div>
@@ -75,7 +76,7 @@ const projects = projectRoutes
       <div style="text-align: center; padding: 60px 20px; color: var(--gray-500);">
         <h2 style="font-size: 1.25rem; margin-bottom: 8px;">Проектов пока нет</h2>
         <p style="margin-bottom: 16px;">Создайте первый проект документации через панель управления</p>
-        <a href="http://192.168.0.101:3001" target="_blank" style="color: #14b8a6; font-size: 14px;">
+        <a href={adminUrl} style="color: #14b8a6; font-size: 14px;">
           Открыть панель управления →
         </a>
       </div>

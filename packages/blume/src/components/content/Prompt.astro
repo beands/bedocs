@@ -1,24 +1,14 @@
 ---
 import { createSatteriMarkdownProcessor } from "@astrojs/markdown-satteri";
 
+import { escapeRawHtml, unwrapParagraph } from "./inline-markdown.ts";
+
 interface Props {
   actions?: boolean | string | string[];
   description: string;
 }
 
 const { actions = ["copy"], description } = Astro.props;
-
-const escapeRawHtml = (value: string): string =>
-  value.replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-
-const unwrapParagraph = (html: string): string => {
-  const trimmed = html.trim();
-  // Only a *single* paragraph is unwrapped: the content must not contain its
-  // own `</p>`, or `<p>a</p>\n<p>b</p>` would "unwrap" to `a</p>\n<p>b` —
-  // unbalanced HTML injected via set:html.
-  const match = trimmed.match(/^<p>(?<content>(?:(?!<\/p>)[\s\S])*)<\/p>$/u);
-  return match?.groups?.content ?? trimmed;
-};
 
 const normalizeActions = (value: Props["actions"]): string[] => {
   if (Array.isArray(value)) {
@@ -93,6 +83,8 @@ const secondaryButton =
 </blume-prompt>
 
 <script>
+  import { copyText, createCopyFlash } from "../copy-feedback.ts";
+
   class BlumePrompt extends HTMLElement {
     connectedCallback() {
       const content = this.querySelector<HTMLElement>(
@@ -116,28 +108,17 @@ const secondaryButton =
       const done = copy?.querySelector<HTMLElement>(
         "[data-blume-prompt-copy-done]"
       );
-      let resetTimer: ReturnType<typeof setTimeout> | undefined;
+      // Toggle visibility rather than swapping text: both labels occupy the
+      // same grid cell, so the button width never changes.
+      const flash = createCopyFlash((copied) => {
+        idle?.classList.toggle("invisible", copied);
+        done?.classList.toggle("invisible", !copied);
+      }, "Copied");
       copy?.addEventListener("click", async () => {
         const text = promptText();
-        if (!text) {
-          return;
+        if (text && (await copyText(text))) {
+          flash();
         }
-        try {
-          await navigator.clipboard.writeText(text);
-        } catch {
-          return;
-        }
-
-        // Toggle visibility rather than swapping text: both labels occupy the
-        // same grid cell, so the button width never changes. Clearing the timer
-        // keeps the "Copied" state 1.5s past the last of several rapid clicks.
-        clearTimeout(resetTimer);
-        idle?.classList.add("invisible");
-        done?.classList.remove("invisible");
-        resetTimer = setTimeout(() => {
-          idle?.classList.remove("invisible");
-          done?.classList.add("invisible");
-        }, 1500);
       });
     }
   }

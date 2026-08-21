@@ -14,8 +14,13 @@ import { API_CATALOG_PATH, hasApiCatalog } from "./api-catalog.ts";
  * The header is homepage-only by design: the root response is what agents
  * probe, and `agent-readability.json` indexes the rest of the surface (the
  * per-route Markdown pattern, MCP, feeds) far better than per-page headers
- * could. Targets are root-relative under `deployment.base` — RFC 8288 resolves
- * them against the request URL. Returns null when nothing is advertisable.
+ * could. An agent that enters on a deep page (a search result, a shared link)
+ * never sees this header at all — that path is covered in the HTML instead:
+ * every page's `<head>` carries the same `describedby` links plus its own
+ * Markdown mirror as an `alternate` (see `RootLayout.astro`), which also
+ * reaches hosts where Blume can't set response headers. Targets are
+ * root-relative under `deployment.base` — RFC 8288 resolves them against the
+ * request URL. Returns null when nothing is advertisable.
  */
 export const buildHomeLinkHeader = (
   config: ResolvedConfig,

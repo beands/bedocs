@@ -36,8 +36,10 @@ export const emptyLedger = (): TranslationLedger => ({
 
 /**
  * Hash the raw source text (frontmatter included), so any edit invalidates
- * every locale's stamp. sha256-16 like the audit snapshot's content hash —
- * never `hashText` (djb2), which is an ephemeral-cache-only hash.
+ * every locale's stamp. sha256-16 like the audit snapshot's content hash.
+ * Kept as its own function rather than sharing core's `hashText`: ledger
+ * stamps persist in user repos, so this hash must never change shape when an
+ * ephemeral cache hash does.
  */
 export const hashSource = (text: string): string =>
   createHash("sha256").update(text).digest("hex").slice(0, 16);

@@ -7,37 +7,41 @@ const referenceHref = "/docs/reference/cli";
 const chevronRight = glyph("chevron-right");
 
 const commands = [
-  { name: "blume init", text: "Scaffold a project, interactive by default." },
-  { name: "blume dev", text: "Start the dev server with hot reload." },
-  { name: "blume build", text: "Build the static (or server) site." },
-  { name: "blume preview", text: "Preview the last build." },
-  { name: "blume add", text: "Install a source component from the registry." },
-  { name: "blume sync", text: "Re-fetch remote content sources." },
+  { name: "bedocs init", text: "Scaffold a project, interactive by default." },
+  { name: "bedocs dev", text: "Start the dev server with hot reload." },
+  { name: "bedocs build", text: "Build the static (or server) site." },
+  { name: "bedocs preview", text: "Preview the last build." },
+  { name: "bedocs add", text: "Install a source component from the registry." },
+  { name: "bedocs sync", text: "Re-fetch remote content sources." },
   {
-    name: "blume eject",
+    name: "bedocs eject",
     text: "Promote the runtime into a standalone Astro app.",
   },
-  { name: "blume check", text: "Type-check the site with astro check." },
-  { name: "blume doctor", text: "Diagnose config and content problems." },
-  { name: "blume validate", text: "Validate links across your content." },
+  { name: "bedocs check", text: "Type-check the site with astro check." },
+  { name: "bedocs doctor", text: "Diagnose config and content problems." },
+  { name: "bedocs validate", text: "Validate links across your content." },
   {
-    name: "blume audit",
+    name: "bedocs audit",
     text: "Audit the built site for SEO and health issues.",
   },
   {
-    name: "blume eval",
+    name: "bedocs eval",
     text: "Test the docs: an agent answers your questions using only the documentation.",
   },
   {
-    name: "blume translate",
+    name: "bedocs translate",
     text: "Translate docs into the configured locales with a local agent CLI.",
+  },
+  {
+    name: "bedocs version",
+    text: "Freeze the current docs as an archived version.",
   },
 ];
 ---
 
 <section>
   <div class="mx-auto max-w-2xl text-center">
-    <h2 class="font-medium text-3xl tracking-tight sm:text-4xl">
+    <h2 class="font-medium text-3xl sm:text-4xl">
       Every command.
     </h2>
     <p class="mx-auto mt-4 max-w-lg text-balance text-muted-foreground">

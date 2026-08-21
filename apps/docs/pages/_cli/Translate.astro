@@ -1,5 +1,5 @@
 ---
-// The `blume translate` spotlight, structured like the audit section: a
+// The `bedocs translate` spotlight, structured like the audit section: a
 // terminal telling the ledger story (drift caught by `--check`, exactly the
 // drifted pages retranslated), then three divided columns — the incremental
 // ledger, structural validation, and the CI gate.
@@ -18,7 +18,7 @@ const cards = [
     title: "Structure survives",
   },
   {
-    body: "`blume translate --check` is a read-only gate: it exits non-zero the moment a source page outruns its translations, so a stale locale surfaces in the pull request instead of in production.",
+    body: "`bedocs translate --check` is a read-only gate: it exits non-zero the moment a source page outruns its translations, so a stale locale surfaces in the pull request instead of in production.",
     icon: glyph("shield-check"),
     title: "Drift fails CI",
   },
@@ -27,7 +27,7 @@ const cards = [
 
 <section>
   <div class="mx-auto max-w-2xl text-center">
-    <h2 class="font-medium text-3xl tracking-tight sm:text-4xl">
+    <h2 class="font-medium text-3xl sm:text-4xl">
       Docs in every language.
     </h2>
     <p class="mx-auto mt-4 max-w-xl text-balance text-muted-foreground">
@@ -65,7 +65,7 @@ const cards = [
               set:html={card.icon}
             />
           </span>
-          <h3 class="mt-5 font-medium text-foreground text-lg tracking-tight">
+          <h3 class="mt-5 font-medium text-foreground text-lg">
             {card.title}
           </h3>
           <p

@@ -1,10 +1,12 @@
 import { readFile } from "node:fs/promises";
 
+import { imageSize } from "image-size";
 import { render } from "takumi-js";
 import type { RenderOptions } from "takumi-js";
 import { container, googleFonts, image, text } from "takumi-js/helpers";
 import type { FontSubset, GoogleFontFamily, Node } from "takumi-js/helpers";
 
+import { ACCENTS, isAccentPreset } from "../theme/palette.ts";
 import { OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH } from "./dimensions.ts";
 
 /** A local font file registered with the OG card renderer, read at build. */
@@ -54,23 +56,15 @@ export interface OgFontFamilies {
   title?: string;
 }
 
-const ACCENT_HEX: Record<string, string> = {
-  blue: "#3b82f6",
-  green: "#22c55e",
-  orange: "#f97316",
-  pink: "#ec4899",
-  purple: "#8b5cf6",
-  red: "#ef4444",
-  teal: "#14b8a6",
-};
-
-// Named presets map to Blume's palette hex (the preset "blue" is not CSS
-// blue); anything else is handed to Takumi as-is — it parses the full CSS
-// color grammar, and a genuinely malformed value fails the build with a
-// parse error naming it. `hasOwn` keeps a preset name like "constructor"
-// from resolving up the prototype chain.
+// Named presets resolve from the theme's own OKLCH table — Takumi parses the
+// full CSS color grammar, so the card renders exactly the accent the site
+// shows (a separate hand-synced hex palette used to drift: the card's "blue"
+// was Tailwind's, not Blume's). Anything else is handed to Takumi as-is, and
+// a genuinely malformed value fails the build with a parse error naming it.
+// `isAccentPreset` keeps a preset name like "constructor" from resolving up
+// the prototype chain.
 const resolveAccent = (accent: string): string =>
-  Object.hasOwn(ACCENT_HEX, accent) ? (ACCENT_HEX[accent] as string) : accent;
+  isAccentPreset(accent) ? ACCENTS[accent] : accent;
 
 export interface OgCardPalette {
   accent?: string;
@@ -159,6 +153,9 @@ const loadFonts = (
   const key = JSON.stringify(fonts);
   let pending = fontSubsetCache.get(key);
   if (!pending) {
+    // SAFETY: OgFont's weight strings are documented as variable ranges like
+    // "100..900" (GoogleFontFamily's WeightRange); Takumi validates the value
+    // at fetch time and fails the build naming a malformed one.
     pending = googleFonts(fonts as GoogleFontFamily[]);
     fontSubsetCache.set(key, pending);
   }
@@ -171,13 +168,29 @@ const loadFonts = (
  * registers each file once across a build's per-page renders; a missing file
  * rejects at first use, failing the build with the path in the cause.
  */
-const localFontLoader = (font: OgLocalFont) => ({
-  data: () => readFile(font.src),
-  key: font.src,
-  name: font.name,
-  ...(font.weight === undefined ? {} : { weight: font.weight }),
-  ...(font.style === undefined ? {} : { style: font.style }),
-});
+/** A lazily-read local font file, in the shape `render` accepts for `fonts`. */
+interface LocalFontSource {
+  data: () => Promise<Buffer>;
+  key: string;
+  name: string;
+  weight?: number;
+  style?: "normal" | "italic";
+}
+
+const localFontLoader = (font: OgLocalFont): LocalFontSource => {
+  const loader: LocalFontSource = {
+    data: () => readFile(font.src),
+    key: font.src,
+    name: font.name,
+  };
+  if (font.weight !== undefined) {
+    loader.weight = font.weight;
+  }
+  if (font.style !== undefined) {
+    loader.style = font.style;
+  }
+  return loader;
+};
 
 // Light neutral scale mirrored from the docs homepage theme tokens:
 // FOREGROUND = --foreground, MUTED = --muted-foreground, FAINT = that lighter,
@@ -219,17 +232,21 @@ export const truncate = (value: string, max: number): string => {
 // at full height — it stands alone as the brand (no text label beside it).
 const MARK_HEIGHT = 32;
 const MARK_MAX_WIDTH = 240;
-// Accept either quote style and a non-zero min-x/min-y; only width/height
-// matter for the aspect ratio. A miss falls back to a square mark.
-const VIEW_BOX =
-  /viewBox=(?<q>["'])[\d.-]+[\s,]+[\d.-]+[\s,]+(?<w>[\d.]+)[\s,]+(?<h>[\d.]+)\k<q>/u;
-
-/** The SVG's viewBox aspect ratio (w/h), or null without a usable viewBox. */
+/**
+ * The SVG's aspect ratio (w/h), or null when no usable dimensions exist (the
+ * caller falls back to a square mark). image-size (already a dependency)
+ * reads explicit width/height and falls back to the viewBox, tolerating the
+ * quote/whitespace/attribute spellings the old regex silently missed —
+ * `viewBox = "…"`, newline-separated values — which shipped visibly-squashed
+ * marks instead of failing loudly.
+ */
 const logoAspect = (svg: string): number | null => {
-  const box = svg.match(VIEW_BOX);
-  const w = Number(box?.groups?.w);
-  const h = Number(box?.groups?.h);
-  return w && h ? w / h : null;
+  try {
+    const { height, width } = imageSize(Buffer.from(svg));
+    return width && height ? width / height : null;
+  } catch {
+    return null;
+  }
 };
 
 // Render the configured logo as the brand mark. A `currentColor` logo carries
@@ -323,7 +340,9 @@ export const renderOgImage = async (
         color: foreground,
         fontSize: titleSize(options.title),
         fontWeight: 600,
-        letterSpacing: "-0.03em",
+        // Matches the theme's heading tracking (entry.ts h1-h6 rule), tuned
+        // for Inter since the display default dropped Inter Tight.
+        letterSpacing: "-0.05em",
         lineHeight: 1.05,
         maxWidth: 1010,
         textWrap: "balance",

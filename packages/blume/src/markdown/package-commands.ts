@@ -1,7 +1,25 @@
+import type { Agent, Command } from "package-manager-detector";
+import { resolveCommand } from "package-manager-detector/commands";
+
 /** Supported package managers, in the order tabs are displayed. */
 export const PACKAGE_MANAGERS = ["npm", "pnpm", "yarn", "bun"] as const;
 
 export type PackageManager = (typeof PACKAGE_MANAGERS)[number];
+
+/**
+ * The agent each tab renders. The yarn tab is pinned to Berry (yarn 2+ — the
+ * only supported line): the pre-existing mix emitted Berry-only `yarn dlx` and
+ * `--immutable` next to Classic-only `yarn global add`, so no single yarn
+ * version could run every rendered command. Berry removed `global`
+ * (yarnpkg/berry#821), so global installs on the yarn tab honestly render
+ * npm's form, matching `ni`'s table.
+ */
+const AGENT_FOR = {
+  bun: "bun",
+  npm: "npm",
+  pnpm: "pnpm",
+  yarn: "yarn@berry",
+} satisfies Record<PackageManager, Agent>;
 
 /** Words that mark the input as an explicit command rather than a bare list. */
 const MANAGER_PREFIXES = new Set(["bun", "bunx", "npm", "npx", "pnpm", "yarn"]);
@@ -118,62 +136,51 @@ const parseIntent = (input: string): Intent => {
   return { args: normalizeFlags(verbArgs), operation };
 };
 
-/** Render one manager's command for the given intent. */
+/** The package-manager-detector command for each non-global operation. */
+const COMMAND_FOR = {
+  add: "add",
+  ci: "frozen",
+  exec: "execute",
+  install: "install",
+  remove: "uninstall",
+  run: "run",
+} satisfies Record<Exclude<Operation, "create">, Command>;
+
+/**
+ * Render one manager's command for the given intent, via
+ * package-manager-detector's maintained agent tables (the engine behind `ni`).
+ */
 const buildCommand = (manager: PackageManager, intent: Intent): string => {
-  const args = intent.args.join(" ");
-  switch (intent.operation) {
-    case "add": {
-      if (manager === "npm") {
-        return `npm install ${args}`;
-      }
-      if (manager === "yarn" && intent.args.some((a) => GLOBAL_FLAGS.has(a))) {
-        const pkgs = intent.args.filter((a) => !GLOBAL_FLAGS.has(a)).join(" ");
-        return `yarn global add ${pkgs}`;
-      }
-      return `${manager} add ${args}`;
-    }
-    case "create": {
-      return `${manager} create ${args}`;
-    }
-    case "exec": {
-      if (manager === "npm") {
-        return `npx ${args}`;
-      }
-      if (manager === "bun") {
-        return `bunx ${args}`;
-      }
-      return `${manager} dlx ${args}`;
-    }
-    case "ci": {
-      // `npm ci` maps to a frozen, lockfile-faithful install elsewhere. Yarn
-      // Berry's flag is `--immutable` (`--frozen-lockfile` was removed in
-      // Yarn 4), matching the Berry-only `yarn dlx` the `exec` case emits.
-      if (manager === "npm") {
-        return "npm ci";
-      }
-      if (manager === "yarn") {
-        return "yarn install --immutable";
-      }
-      return `${manager} install --frozen-lockfile`;
-    }
-    case "remove": {
-      if (manager === "npm") {
-        return `npm uninstall ${args}`;
-      }
-      // Yarn Classic has no `remove -g`; the global form is `yarn global remove`.
-      if (manager === "yarn" && intent.args.some((a) => GLOBAL_FLAGS.has(a))) {
-        const pkgs = intent.args.filter((a) => !GLOBAL_FLAGS.has(a)).join(" ");
-        return `yarn global remove ${pkgs}`;
-      }
-      return `${manager} remove ${args}`;
-    }
-    case "run": {
-      return `${manager} run ${args}`;
-    }
-    default: {
-      return `${manager} install`;
-    }
+  // The tables carry no `create`; every manager spells it the same way.
+  if (intent.operation === "create") {
+    return `${manager} create ${intent.args.join(" ")}`;
   }
+  // A `-g`/`--global` flag selects the dedicated global command (the tables
+  // place the flag themselves, per manager).
+  const global =
+    (intent.operation === "add" || intent.operation === "remove") &&
+    intent.args.some((arg) => GLOBAL_FLAGS.has(arg));
+  const args = global
+    ? intent.args.filter((arg) => !GLOBAL_FLAGS.has(arg))
+    : intent.args;
+  const command: Command = global
+    ? (intent.operation === "add" && "global") || "global_uninstall"
+    : COMMAND_FOR[intent.operation];
+  // Non-null: every operation above maps to a command each supported agent's
+  // table defines (null is only possible for gaps like npm's
+  // upgrade-interactive, which no Operation reaches).
+  const resolved = resolveCommand(AGENT_FOR[manager], command, args);
+  const words = resolved
+    ? [resolved.command, ...resolved.args]
+    : [manager, ...args];
+  // Docs favor the explicit spellings over the tables' terse aliases.
+  if (words[1] === "i") {
+    words[1] = "install";
+  }
+  if (words[0] === "bun" && words[1] === "x") {
+    words.splice(0, 2, "bunx");
+  }
+  return words.join(" ");
 };
 
 /**
@@ -181,9 +188,7 @@ const buildCommand = (manager: PackageManager, intent: Intent): string => {
  * manager. Accepts a bare package list (`react`) or a full command
  * (`npm i -D typescript`, `npx astro add react`).
  */
-export const toPackageCommands = (
-  input: string
-): Record<PackageManager, string> => {
+export const toPackageCommands = (input: string) => {
   const intent = parseIntent(input);
   const normalize = (command: string): string =>
     command.replaceAll(WHITESPACE_RUN, " ").trim();
@@ -192,5 +197,5 @@ export const toPackageCommands = (
     npm: normalize(buildCommand("npm", intent)),
     pnpm: normalize(buildCommand("pnpm", intent)),
     yarn: normalize(buildCommand("yarn", intent)),
-  };
+  } satisfies Record<PackageManager, string>;
 };

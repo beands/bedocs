@@ -24,22 +24,29 @@ import type {
 } from "../../core/data.ts";
 import { EN_UI } from "../../core/i18n-ui.ts";
 import type { UIStrings } from "../../core/i18n-ui.ts";
+import type { FontHead } from "../../theme/fonts.ts";
 import type { LocaleSwitchOption, Navigation } from "../../core/types.ts";
 import {
   OG_IMAGE_HEIGHT,
   OG_IMAGE_TYPE,
   OG_IMAGE_WIDTH,
 } from "../../og/dimensions.ts";
+import { buildStructuredData } from "../../seo/jsonld.ts";
 import { normalizeXHandle } from "../../seo/x-handle.ts";
 import { withBase } from "../islands/base-path.ts";
 import "blume:theme";
+import { ClientRouter } from "astro:transitions";
 import Analytics from "./Analytics.astro";
 import Banner from "./Banner.astro";
 import Favicon from "./Favicon.astro";
 import Fonts from "./Fonts.astro";
-import { BANNER_INIT_SCRIPT, THEME_INIT_SCRIPT } from "./head-scripts.ts";
+import {
+  BANNER_INIT_SCRIPT,
+  SWAP_STYLESHEET_INIT_SCRIPT,
+  THEME_INIT_SCRIPT,
+} from "./head-scripts.ts";
 import Header from "./Header.astro";
-import { activeTabForRoute } from "./nav-utils.ts";
+import { currentTabForRoute } from "./nav-utils.ts";
 import WebMcp from "./WebMcp.astro";
 
 interface Props {
@@ -57,7 +64,7 @@ interface Props {
    */
   page?: { title?: string; description?: string; route?: string };
   themeMode: "system" | "light" | "dark";
-  fontCssVars?: string[];
+  fontCssVars?: (string | FontHead)[];
   searchEnabled: boolean;
   /**
    * Opt this page out of the header's Ask AI trigger. Defaults to whether Ask
@@ -75,7 +82,24 @@ interface Props {
   ogEnabled?: boolean;
   /** SEO overrides; a marketing page often sets its own canonical/og image. */
   ogImage?: string | null;
+  /**
+   * Alt text for a user-supplied `ogImage`, emitted as `og:image:alt` /
+   * `twitter:image:alt`. The generated card derives its own from the title.
+   */
+  ogImageAlt?: string;
+  /**
+   * Pixel size of a user-supplied `ogImage`, emitted as `og:image:width` /
+   * `og:image:height` so crawlers can lay the card out before fetching it.
+   * The generated card declares its known size automatically.
+   */
+  ogImageSize?: { height: number; width: number };
   canonical?: string | null;
+  /**
+   * Emit schema.org JSON-LD for this page (`data.config.structuredData`) — a
+   * WebSite node, plus an article node on non-root routes. Defaults to on,
+   * matching RootLayout.
+   */
+  structuredDataEnabled?: boolean;
   /**
    * X (Twitter) attribution (`data.config.x`): the site's account and an author
    * handle, emitted as `twitter:site`/`twitter:creator`.
@@ -113,7 +137,10 @@ const {
   siteUrl,
   ogEnabled,
   ogImage,
+  ogImageAlt,
+  ogImageSize,
   canonical,
+  structuredDataEnabled,
   x,
   noindex,
   locale = "en",
@@ -138,7 +165,7 @@ const searchLocale =
 const pageTitle = page?.title ?? site.title;
 const description = page?.description ?? site.description;
 const route = page?.route ?? "/";
-const activeTab = activeTabForRoute(navigation.tabs, route);
+const activeTab = currentTabForRoute(navigation.tabs, route, navigation.root);
 
 // Derive canonical + og:image from the site URL the same way the catch-all does
 // for content pages, so a custom page gets both for free. The matching OG card
@@ -152,9 +179,14 @@ const basedRoute = withBase(route);
 // strip it before joining with the root-relative route so canonical/og URLs
 // don't come out double-slashed — the catch-all strips it the same way.
 const siteBase = siteUrl ? siteUrl.replace(/\/$/u, "") : null;
+// The route-derived part is percent-encoded (the sitemap convention) so a
+// Unicode route slug yields a legal URI that byte-matches the sitemap <loc> —
+// including the root, whose <loc> is `https://site/` with the slash.
 const resolvedCanonical =
   canonical ??
-  (siteBase ? `${siteBase}${basedRoute === "/" ? "" : basedRoute}` : null);
+  (siteBase
+    ? `${siteBase}${basedRoute === "/" ? "/" : encodeURI(basedRoute)}`
+    : null);
 // An explicit `ogImage` wins. A root-relative path (e.g. an image dropped in
 // `public/`) is resolved against the site URL so crawlers get an absolute
 // `og:image`; an already-absolute URL passes through untouched. Otherwise fall
@@ -164,7 +196,7 @@ const absolutizeOgImage = (value: string): string =>
 const resolvedOgImage = ogImage
   ? absolutizeOgImage(ogImage)
   : ogEnabled && siteBase
-    ? `${siteBase}${withBase(`/og/${ogSlug}.png`)}`
+    ? `${siteBase}${encodeURI(withBase(`/og/${ogSlug}.png`))}`
     : null;
 // Only the generated card has a known size and format, so its dimensions are
 // declared for crawlers; a user-supplied `ogImage` could be any image.
@@ -176,6 +208,25 @@ const twitterCard = resolvedOgImage ? "summary_large_image" : "summary";
 const xSite = normalizeXHandle(x?.handle);
 const xCreator = normalizeXHandle(x?.creator);
 
+// JSON-LD, mirroring RootLayout: skipped when disabled or noindexed. A custom
+// page has no breadcrumb trail; the home route yields the WebSite node alone.
+const structuredData =
+  structuredDataEnabled === false || noindex
+    ? null
+    : buildStructuredData({
+      base: import.meta.env.BASE_URL,
+      breadcrumbs: [],
+      description,
+      locale,
+      route,
+      siteName: site.title,
+      siteUrl: siteUrl ?? null,
+      title: pageTitle,
+    });
+const structuredDataJson = structuredData
+  ? JSON.stringify(structuredData).replaceAll("<", "\\u003c")
+  : null;
+
 const bannerKey = banner?.dismissible ? banner.key : null;
 ---
 
@@ -184,6 +235,13 @@ const bannerKey = banner?.dismissible ? banner.key : null;
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    {/* Client-side navigation, matching RootLayout: same-origin link clicks
+        swap the DOM in place instead of tearing the document down, so no
+        browser paints a blank frame between pages. */}
+    <ClientRouter />
+    {/* Loads a next page's body-hoisted CSS before the router swaps it in —
+        see SWAP_STYLESHEET_INIT_SCRIPT for the unstyled-frame failure mode. */}
+    <script is:inline set:html={SWAP_STYLESHEET_INIT_SCRIPT} />
     <title>{pageTitle}</title>
     <Favicon appleIcon={appleIcon} favicon={favicon} />
     <Fonts cssVars={fontCssVars ?? []} />
@@ -214,8 +272,26 @@ const bannerKey = banner?.dismissible ? banner.key : null;
               <meta content={pageTitle} property="og:image:alt" />
             </>
           )}
+          {!ogGenerated && ogImageSize && (
+            <>
+              <meta
+                content={String(ogImageSize.width)}
+                property="og:image:width"
+              />
+              <meta
+                content={String(ogImageSize.height)}
+                property="og:image:height"
+              />
+            </>
+          )}
+          {!ogGenerated && ogImageAlt && (
+            <meta content={ogImageAlt} property="og:image:alt" />
+          )}
           <meta content={resolvedOgImage} name="twitter:image" />
           {ogGenerated && <meta content={pageTitle} name="twitter:image:alt" />}
+          {!ogGenerated && ogImageAlt && (
+            <meta content={ogImageAlt} name="twitter:image:alt" />
+          )}
         </>
       )
     }
@@ -224,6 +300,15 @@ const bannerKey = banner?.dismissible ? banner.key : null;
     {description && <meta content={description} name="twitter:description" />}
     {xSite && <meta content={xSite} name="twitter:site" />}
     {xCreator && <meta content={xCreator} name="twitter:creator" />}
+    {
+      structuredDataJson && (
+        <script
+          is:inline
+          set:html={structuredDataJson}
+          type="application/ld+json"
+        />
+      )
+    }
     {
       bannerKey && (
         <script data-key={bannerKey} is:inline set:html={BANNER_INIT_SCRIPT} />
@@ -305,36 +390,12 @@ const bannerKey = banner?.dismissible ? banner.key : null;
       )
     }
     <script>
+      import { syncDrawerInert } from "./drawer-inert.ts";
       // Dev-only: friendly hint after a React island hydration mismatch;
       // tree-shaken out of production builds.
       import "./hydration-hint.ts";
 
-      // The closed tabs drawer is only translated off-canvas, so its links
-      // would stay in the tab order. Mirror the header's `data-blume-nav-open`
-      // toggle into `inert`/`aria-hidden` below `lg` (64rem), matching the
-      // breakpoint where the drawer is display-hidden anyway.
-      const drawer = document.querySelector<HTMLElement>(
-        "[data-blume-nav-drawer]"
-      );
-      if (drawer) {
-        const desktop = window.matchMedia("(min-width: 64rem)");
-        const syncDrawer = () => {
-          const hidden =
-            !desktop.matches &&
-            !document.documentElement.hasAttribute("data-blume-nav-open");
-          drawer.inert = hidden;
-          if (hidden) {
-            drawer.setAttribute("aria-hidden", "true");
-          } else {
-            drawer.removeAttribute("aria-hidden");
-          }
-        };
-        syncDrawer();
-        desktop.addEventListener("change", syncDrawer);
-        new MutationObserver(syncDrawer).observe(document.documentElement, {
-          attributeFilter: ["data-blume-nav-open"],
-        });
-      }
+      syncDrawerInert();
     </script>
   </body>
 </html>

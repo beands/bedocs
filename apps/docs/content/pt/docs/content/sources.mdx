@@ -147,7 +147,7 @@ export default defineConfig({
 });
 ```
 
-O token de integração vem da variável de ambiente `NOTION_TOKEN` (compartilhe o banco de dados com a sua integração). Por padrão, todas as páginas são importadas; defina `publishedValue` para fazer da propriedade `Status` um controle de publicação — qualquer outro valor passa então a ser mapeado para `draft: true`, que os builds de produção descartam. **As URLs de imagem do Notion são assinadas e expiram**, portanto o adaptador as baixa em tempo de build para os assets do site e reescreve as referências — uma imagem de CMS nunca apodrece um build estático.
+O token de integração vem da variável de ambiente `NOTION_TOKEN` (compartilhe o banco de dados com a sua integração). Por padrão, todas as páginas são importadas; defina `publishedValue` para fazer da propriedade `Status` um controle de publicação — qualquer outro valor passa então a ser mapeado para `draft: true`, que os builds de produção descartam. **As URLs de imagem do Notion são assinadas e expiram**, portanto o adaptador as baixa em tempo de build para os assets do site e reescreve as referências — uma imagem de CMS nunca apodrece um build estático. As chamadas à API são ritmadas por um pequeno pool de requisições (3 por vez, correspondendo ao limite de taxa por integração do Notion), de modo que bancos de dados com centenas de páginas são importados sem esbarrar em respostas `429`; defina `concurrency` na fonte para ajustar isso.
 
 ## Preview e sincronização
 

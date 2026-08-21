@@ -11,7 +11,7 @@ import {
 // The two eval frosted-card scenes, sharing one card frame so the file cuts
 // to the terminal without the stage changing shape:
 //   EvalYaml — the user's questions land in evals.yaml, line by line.
-//   EvalRun — `blume eval` streams the per-question results (glyph, id,
+//   EvalRun — `bedocs eval` streams the per-question results (glyph, id,
 //   status, score, time, spend — exactly the shape the real CLI prints).
 
 const MONO = "var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace";
@@ -115,7 +115,7 @@ const SUMMARY = "5 passed · 2 failed · 1 skipped · 2m 9s · $1.05";
 // packages/blume/src/eval/report.ts — real line shapes, real fix strings, the
 // staggered delays standing in for each question's reader/judge run.
 const RUN_LINES: TermLine[] = [
-  { delay: 16, kind: "cmd", text: "blume eval" },
+  { delay: 16, kind: "cmd", text: "bedocs eval" },
   { delay: 10, kind: "blank" },
   { delay: 0, kind: "header", meta: HEADER_META },
   { delay: 4, kind: "blank" },
@@ -254,16 +254,16 @@ const RUN_SCRIPT = makeScript(RUN_LINES, 76);
 
 export const EVAL_RUN_DURATION = RUN_SCRIPT.duration;
 
-const STATUS_COLOR: Record<QuestionStatus, string> = {
+const STATUS_COLOR = {
   fail: ERROR,
   pass: GREEN,
   skip: FAINT,
-};
-const GLYPH: Record<QuestionStatus, string> = {
+} satisfies Record<QuestionStatus, string>;
+const GLYPH = {
   fail: "✖",
   pass: "✔",
   skip: "⊘",
-};
+} satisfies Record<QuestionStatus, string>;
 
 const TrafficLight = ({ color }: { color: string }) => (
   <span

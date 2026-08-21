@@ -54,7 +54,7 @@ import {
   platformRedirects,
 } from "../../deploy/redirects.ts";
 import { buildRobots } from "../../deploy/robots.ts";
-import { buildSitemap } from "../../deploy/sitemap.ts";
+import { buildSitemapFiles } from "../../deploy/sitemap.ts";
 import { injectNegotiationRoutes } from "../../deploy/vercel-negotiation.ts";
 import { buildSearchIndex } from "../../search/build.ts";
 import { syncSearchProvider } from "../../search/sync/index.ts";
@@ -63,6 +63,9 @@ import { logger } from "../log.ts";
 import { prepareProject } from "../prepare.ts";
 
 const ADAPTERS = ["vercel", "node", "netlify", "cloudflare"] as const;
+
+const isAdapter = (value: string): value is (typeof ADAPTERS)[number] =>
+  ADAPTERS.some((adapter) => adapter === value);
 
 const BUDGET_JS = "budget-js";
 const BUDGET_CSS = "budget-css";
@@ -295,14 +298,13 @@ const emitVercelNegotiation = async (
   if (!existsSync(configPath)) {
     return;
   }
-  const overrides: Record<string, string> = {
-    ...(hasApiCatalog(config)
-      ? { [API_CATALOG_PATH.slice(1)]: API_CATALOG_TYPE }
-      : {}),
-    ...(config.ai.webBotAuth.keys.length > 0
-      ? { [SIGNATURES_DIRECTORY_PATH.slice(1)]: SIGNATURES_DIRECTORY_TYPE }
-      : {}),
-  };
+  const overrides: Record<string, string> = {};
+  if (hasApiCatalog(config)) {
+    overrides[API_CATALOG_PATH.slice(1)] = API_CATALOG_TYPE;
+  }
+  if (config.ai.webBotAuth.keys.length > 0) {
+    overrides[SIGNATURES_DIRECTORY_PATH.slice(1)] = SIGNATURES_DIRECTORY_TYPE;
+  }
   // The homepage rewrite serves `/index.md` from the static layer, so its
   // `x-markdown-tokens` estimate has to ride the routing config; the runtime
   // endpoint stamps it on dev/server-rendered responses itself.
@@ -616,10 +618,18 @@ const publishBuildArtifacts = async (
   }
 
   // A user's own public/ file (copied into dist by Astro) always wins.
-  const sitemap = buildSitemap(project);
-  if (sitemap && !existsSync(join(distDir, "sitemap.xml"))) {
-    await writeFile(join(distDir, "sitemap.xml"), sitemap, "utf-8");
-    logger.success("Generated sitemap.xml");
+  const sitemapFiles = buildSitemapFiles(project);
+  if (sitemapFiles && !existsSync(join(distDir, "sitemap.xml"))) {
+    await Promise.all(
+      sitemapFiles.map((file) =>
+        writeFile(join(distDir, file.name), file.xml, "utf-8")
+      )
+    );
+    logger.success(
+      sitemapFiles.length === 1
+        ? "Generated sitemap.xml"
+        : `Generated sitemap.xml (index of ${sitemapFiles.length - 1} sitemap files)`
+    );
   }
 
   const robots = buildRobots(project);
@@ -649,7 +659,7 @@ const publishBuildArtifacts = async (
 
   const { config } = project;
   const features = serverFeatures(config);
-  // `buildSitemap` returns null both when the sitemap is disabled and when no
+  // `buildSitemapFiles` returns null both when the sitemap is disabled and when no
   // `site` is configured — only the latter deserves the remediation hint.
   const sitemapNote = config.seo.sitemap
     ? "no (set deployment.site)"
@@ -661,7 +671,7 @@ const publishBuildArtifacts = async (
       `Site       ${config.deployment.site ?? "not set"}`,
       `Search     ${config.search.provider}`,
       `Redirects  ${config.redirects.length}`,
-      `Sitemap    ${sitemap ? "yes" : sitemapNote}`,
+      `Sitemap    ${sitemapFiles ? "yes" : sitemapNote}`,
       `Robots     ${robots ? "yes" : "no"}`,
       `Agent JSON ${agentReadability ? "yes" : "no"}`,
       `LLM files  ${config.ai.llmsTxt.enabled ? "yes" : "no"}`,
@@ -746,7 +756,7 @@ export const buildCommand = defineCommand({
       logger.error(`Invalid --output "${args.output}" (use static | server).`);
       process.exit(1);
     }
-    if (args.adapter && !ADAPTERS.includes(args.adapter as never)) {
+    if (args.adapter && !isAdapter(args.adapter)) {
       logger.error(
         `Invalid --adapter "${args.adapter}" (use ${ADAPTERS.join(" | ")}).`
       );
@@ -757,8 +767,12 @@ export const buildCommand = defineCommand({
     const project = await prepareProject({
       mode: "build",
       overrides: {
+        // SAFETY: an invalid --adapter exited above; a set flag is an ADAPTERS
+        // member.
         adapter: args.adapter as (typeof ADAPTERS)[number] | undefined,
         base: args.base,
+        // SAFETY: an invalid --output exited above; a set flag is static or
+        // server.
         output: args.output as "server" | "static" | undefined,
       },
       preview: args.preview,

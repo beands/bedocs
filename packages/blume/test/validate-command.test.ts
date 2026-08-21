@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "pathe";
 
 /**
- * `blume validate` exercised end-to-end as a subprocess: the exit code is the
+ * `bedocs validate` exercised end-to-end as a subprocess: the exit code is the
  * CLI's CI contract, and `--strict` must escalate warnings — but not info-level
  * notes like BLUME_ASSETS_UNCHECKED — to failures.
  */

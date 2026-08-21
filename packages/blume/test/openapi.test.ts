@@ -1,8 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
 import { join } from "pathe";
+import stringWidth from "string-width";
 
 import {
   constraints,
@@ -16,21 +17,27 @@ import {
   toJson,
   typeLabel,
 } from "../src/components/openapi/helpers.ts";
-import type { SchemaLike } from "../src/components/openapi/helpers.ts";
+import type {
+  ParameterLike,
+  SchemaLike,
+} from "../src/components/openapi/helpers.ts";
+import { operationModel } from "../src/components/openapi/operation-model.ts";
+import {
+  buildRequest,
+  defaultValues,
+} from "../src/components/openapi/request.ts";
 import {
   effectiveSecurity,
   resolveSecurity,
-  sampleAuth,
   schemeCarrier,
   schemeLabel,
 } from "../src/components/openapi/security.ts";
-import {
-  buildRequestSample,
-  sampleLanguages,
-} from "../src/components/openapi/snippets.ts";
+import type { SecurityRequirementLike } from "../src/components/openapi/security.ts";
+import { sampleLanguages } from "../src/components/openapi/snippets.ts";
+import { scanProject } from "../src/core/project-graph.ts";
 import { blumeConfigSchema } from "../src/core/schema.ts";
 import { resolveSources } from "../src/core/sources/resolve.ts";
-import type { ProjectContext } from "../src/core/types.ts";
+import type { NavNode, ProjectContext } from "../src/core/types.ts";
 import {
   extractOperations,
   operationKey,
@@ -53,29 +60,72 @@ const ctx = (projectRoot: string) => ({
   projectRoot,
 });
 
-const SPEC_3_1 = {
-  components: {
-    schemas: {
-      Pet: {
-        properties: {
-          id: { format: "int64", type: "integer" },
-          name: { example: "doggie", type: "string" },
-          status: { enum: ["available", "sold"], type: "string" },
-          tags: { items: { $ref: "#/components/schemas/Tag" }, type: "array" },
-        },
-        required: ["name"],
-        type: "object",
-      },
-      Tag: {
-        // Self-referential to exercise the circular-ref guard.
-        properties: {
-          child: { $ref: "#/components/schemas/Tag" },
-          name: { type: "string" },
-        },
-        type: "object",
-      },
+/**
+ * The slice of an operation the path fixtures in this file exercise. Schemas
+ * use `SchemaLike` because Blume keeps `$ref` nodes inline, which the scalar
+ * `SchemaObject` union does not model.
+ */
+interface OperationFixture {
+  operationId?: string;
+  summary?: string;
+  tags?: string[];
+  parameters?: ParameterLike[];
+  requestBody?: {
+    content?: Record<string, { schema?: SchemaLike }>;
+    required?: boolean;
+  };
+  responses?: Record<
+    string,
+    { content?: Record<string, { schema?: SchemaLike }>; description?: string }
+  >;
+}
+
+/** A path item as fixtures declare it: real, or `null` for the malformed case. */
+type PathItemFixture = {
+  $ref?: string;
+  get?: OperationFixture;
+  post?: OperationFixture;
+} | null;
+
+/**
+ * Widen a partial spec fixture into the parsed-document type. Fixtures stay
+ * minimal — no `info`, sometimes a deliberately malformed path item — because
+ * extractOperations must harden against exactly that input.
+ */
+const asDocument = (
+  spec: Partial<Omit<ApiDocument, "components" | "paths">> & {
+    /** Component schemas as Blume renders them: `$ref` nodes kept inline. */
+    components?: { schemas?: Record<string, SchemaLike> };
+    paths?: Record<string, PathItemFixture>;
+  }
+): ApiDocument =>
+  // SAFETY: every Document field a fixture omits is optional at runtime, and
+  // the malformed entries (null path items) are the hardening cases under test.
+  spec as ApiDocument;
+
+const SPEC_SCHEMAS = {
+  Pet: {
+    properties: {
+      id: { format: "int64", type: "integer" },
+      name: { example: "doggie", type: "string" },
+      status: { enum: ["available", "sold"], type: "string" },
+      tags: { items: { $ref: "#/components/schemas/Tag" }, type: "array" },
     },
+    required: ["name"],
+    type: "object",
   },
+  Tag: {
+    // Self-referential to exercise the circular-ref guard.
+    properties: {
+      child: { $ref: "#/components/schemas/Tag" },
+      name: { type: "string" },
+    },
+    type: "object",
+  },
+} satisfies Record<string, SchemaLike>;
+
+const SPEC_3_1 = asDocument({
+  components: { schemas: SPEC_SCHEMAS },
   info: { description: "A pet store.", title: "Petstore", version: "1.0.0" },
   openapi: "3.1.0",
   paths: {
@@ -126,30 +176,46 @@ const SPEC_3_1 = {
     },
   },
   servers: [{ url: "https://api.test/v1" }],
-} as unknown as ApiDocument;
+});
 
-const tempSpec = async (contents: unknown): Promise<string> => {
+/** Spec-file contents to write to disk: a 3.x fixture or a legacy 2.0 one. */
+const tempSpec = async (
+  contents: Partial<ApiDocument> & { swagger?: string }
+): Promise<string> => {
   const dir = await mkdtemp(join(tmpdir(), "blume-openapi-"));
   const file = join(dir, "spec.json");
   await writeFile(file, JSON.stringify(contents));
   return dir;
 };
 
+/**
+ * Wrap a request handler as a full `fetch`: Bun's `fetch` also carries a
+ * `preconnect` helper, so the stub borrows the real one (never called here).
+ */
+const asFetch = (
+  handler: (
+    input: string | URL | Request,
+    init?: RequestInit
+  ) => Promise<Response>
+): typeof fetch => Object.assign(handler, { preconnect: fetch.preconnect });
+
 /** A `fetch` stub that always resolves to the given response. */
 const respondWith = (response: Response): typeof fetch =>
-  (() => Promise.resolve(response)) as unknown as typeof fetch;
+  asFetch(() => Promise.resolve(response));
 
 // A `fetch` stub that yields queued responses (repeating the last), and records
 // how many times it was called plus the last init it received.
 const queued = (responses: Response[]) => {
   let count = 0;
   let lastInit: RequestInit | undefined;
-  const stub = ((_url: string, init?: RequestInit) => {
+  const stub = asFetch((_url, init) => {
     lastInit = init;
     const response = responses[Math.min(count, responses.length - 1)];
     count += 1;
-    return Promise.resolve(response);
-  }) as unknown as typeof fetch;
+    return response
+      ? Promise.resolve(response)
+      : Promise.reject(new Error("queued() needs at least one response"));
+  });
   return {
     get calls() {
       return count;
@@ -173,14 +239,33 @@ describe("references", () => {
     expect(refs[0]?.display).toStrictEqual({
       codeSamples: ["curl", "js", "python"],
       expandSchemas: false,
+      playground: { enabled: true, proxy: false },
     });
     expect(hasScalarReferences(config)).toBe(false);
     expect(blumeReferences(config)).toHaveLength(1);
   });
 
-  it("keeps AsyncAPI on the Scalar renderer", () => {
+  it("resolves a Blume-rendered AsyncAPI reference by default", () => {
     const config = blumeConfigSchema.parse({
       asyncapi: { enabled: true, spec: "async.yaml" },
+    });
+    const refs = resolveReferences(config);
+    expect(refs).toHaveLength(1);
+    expect(refs[0]?.renderer).toBe("blume");
+    expect(refs[0]?.kind).toBe("asyncapi");
+    expect(refs[0]?.slug).toBe("events");
+    expect(refs[0]?.display).toStrictEqual({
+      codeSamples: [],
+      expandSchemas: false,
+      playground: { enabled: true, proxy: false },
+    });
+    expect(hasScalarReferences(config)).toBe(false);
+    expect(blumeReferences(config)).toHaveLength(1);
+  });
+
+  it("keeps the Scalar opt-out for AsyncAPI", () => {
+    const config = blumeConfigSchema.parse({
+      asyncapi: { enabled: true, renderer: "scalar", spec: "async.yaml" },
     });
     expect(hasScalarReferences(config)).toBe(true);
     expect(blumeReferences(config)).toStrictEqual([]);
@@ -306,6 +391,8 @@ describe("references", () => {
     const config = blumeConfigSchema.parse({
       openapi: { enabled: true, spec: "spec.json" },
     });
+    // SAFETY: resolveSources only reads `root`, `contentRoot`, and `outDir`
+    // from the context; the other ProjectContext paths are never touched.
     const context = {
       contentRoot: "/p/docs",
       outDir: "/p/.blume",
@@ -346,14 +433,14 @@ describe("model.extractOperations", () => {
 
   it("warns on a $ref path item instead of silently dropping it", () => {
     const { operations, warnings } = extractOperations(
-      {
+      asDocument({
         openapi: "3.1.0",
         paths: {
           "/gone": null,
           "/pets": { $ref: "#/components/pathItems/pets" },
           "/x": { get: { operationId: "x" } },
         },
-      } as unknown as ApiDocument,
+      }),
       "/api"
     );
     // The empty item is skipped silently; only the $ref one is reported.
@@ -369,13 +456,13 @@ describe("model.extractOperations", () => {
 
   it("de-duplicates a repeated operationId across operations", () => {
     const { operations } = extractOperations(
-      {
+      asDocument({
         openapi: "3.1.0",
         paths: {
           "/a": { get: { operationId: "dup" } },
           "/b": { post: { operationId: "dup" } },
         },
-      } as unknown as ApiDocument,
+      }),
       "/api"
     );
     const keys = operations.map((op) => op.key);
@@ -385,11 +472,11 @@ describe("model.extractOperations", () => {
 
   it("carries tag descriptions from the document's top-level tags", () => {
     const { tags } = extractOperations(
-      {
+      asDocument({
         openapi: "3.1.0",
         paths: { "/x": { get: { operationId: "x", tags: ["pet"] } } },
         tags: [{ description: "Pet ops", name: "pet" }],
-      } as unknown as ApiDocument,
+      }),
       "/api"
     );
     expect(tags).toStrictEqual([
@@ -397,40 +484,140 @@ describe("model.extractOperations", () => {
     ]);
   });
 
-  it("keeps distinct all-non-ASCII tags on distinct slugs", () => {
+  it("keeps distinct non-Latin tags on distinct letter-preserving slugs", () => {
     const { operations, tags } = extractOperations(
-      {
+      asDocument({
         openapi: "3.1.0",
         paths: {
           "/orders": { get: { operationId: "listOrders", tags: ["注文"] } },
           "/pets": { get: { operationId: "listPets", tags: ["ペット"] } },
           "/pets/{petId}": { get: { operationId: "getPet", tags: ["ペット"] } },
         },
-      } as unknown as ApiDocument,
+      }),
       "/api"
     );
     const byKey = new Map(operations.map((op) => [op.key, op]));
-    // Both slugify to nothing and fall back to "operations"; sharing the slug
-    // would silently merge the two tags' routes and sections. Collisions gain
-    // a suffix in first-seen order.
-    expect(byKey.get("listorders")?.tagSlug).toBe("operations");
-    expect(byKey.get("listpets")?.tagSlug).toBe("operations-2");
-    expect(byKey.get("listorders")?.route).toBe("/api/operations/listorders");
-    expect(byKey.get("listpets")?.route).toBe("/api/operations-2/listpets");
-    // The same tag name still shares one slug across its operations.
-    expect(byKey.get("getpet")?.tagSlug).toBe("operations-2");
-    // The tag list resolves to the slugs its operations were routed under.
+    expect(byKey.get("listorders")?.tagSlug).toBe("注文");
+    expect(byKey.get("listpets")?.tagSlug).toBe("ペット");
+    expect(byKey.get("listorders")?.route).toBe("/api/注文/listorders");
+    expect(byKey.get("listpets")?.route).toBe("/api/ペット/listpets");
+    expect(byKey.get("getpet")?.tagSlug).toBe("ペット");
     expect(
       tags.map((tag) => ({ name: tag.name, slug: tag.slug }))
     ).toStrictEqual([
-      { name: "注文", slug: "operations" },
-      { name: "ペット", slug: "operations-2" },
+      { name: "注文", slug: "注文" },
+      { name: "ペット", slug: "ペット" },
+    ]);
+  });
+
+  it("keeps diacritics in tag slugs so nav labels stay one word", () => {
+    const nfdNinos = "Nin\u0303os";
+    const { operations, tags } = extractOperations(
+      asDocument({
+        openapi: "3.1.0",
+        paths: {
+          "/children": {
+            get: {
+              operationId: "listChildren",
+              tags: ["Niños"],
+            },
+          },
+          "/nfd-children": {
+            get: {
+              operationId: "listNfdChildren",
+              tags: [nfdNinos],
+            },
+          },
+          "/sizes": {
+            get: {
+              operationId: "listSizes",
+              tags: ["Größe"],
+            },
+          },
+        },
+      }),
+      "/api"
+    );
+    const byKey = new Map(operations.map((op) => [op.key, op]));
+    expect(byKey.get("listchildren")?.tagSlug).toBe("niños");
+    // The NFD spelling normalizes onto the same slug as the NFC tag; the two
+    // are still distinct tag *names*, so the collision suffix keeps their
+    // routes apart visibly instead of minting a byte-distinct, pixel-identical
+    // twin slug.
+    expect(byKey.get("listnfdchildren")?.tagSlug).toBe("niños-2");
+    expect(byKey.get("listsizes")?.tagSlug).toBe("größe");
+    expect(
+      tags.map((tag) => ({ name: tag.name, slug: tag.slug }))
+    ).toStrictEqual([
+      { name: "Niños", slug: "niños" },
+      { name: nfdNinos, slug: "niños-2" },
+      { name: "Größe", slug: "größe" },
+    ]);
+  });
+
+  it("drops format characters instead of splitting on them", () => {
+    // ZWNJ (U+200C) is orthographically mandatory inside Persian compounds;
+    // turning it into a hyphen re-creates the word-splitting bug this slug
+    // policy exists to fix (the humanizer splits on hyphens).
+    const { operations, tags } = extractOperations(
+      asDocument({
+        openapi: "3.1.0",
+        paths: {
+          "/apps": {
+            get: { operationId: "listApps", tags: ["نرم‌افزار"] },
+          },
+        },
+      }),
+      "/api"
+    );
+    expect(operations[0]?.tagSlug).toBe("نرمافزار");
+    expect(tags[0]?.slug).toBe("نرمافزار");
+  });
+
+  it("falls back when a tag is only combining marks", () => {
+    // A bare combining mark is truthy but has no base letter — without the
+    // leading-mark trim it would bypass the `operations` fallback and mint an
+    // invisible route segment that glues onto the preceding `/` in URLs.
+    const { operations, tags } = extractOperations(
+      asDocument({
+        openapi: "3.1.0",
+        paths: {
+          "/a": { get: { operationId: "a", tags: ["̃"] } },
+        },
+      }),
+      "/api"
+    );
+    expect(operations[0]?.tagSlug).toBe("operations");
+    expect(tags[0]?.slug).toBe("operations");
+  });
+
+  it("falls back when a tag has no letters or numbers", () => {
+    const { operations, tags } = extractOperations(
+      asDocument({
+        openapi: "3.1.0",
+        paths: {
+          "/a": { get: { operationId: "a", tags: ["!!!"] } },
+          "/b": { get: { operationId: "b", tags: ["???"] } },
+        },
+      }),
+      "/api"
+    );
+    const byKey = new Map(operations.map((op) => [op.key, op]));
+    expect(byKey.get("a")?.tagSlug).toBe("operations");
+    expect(byKey.get("b")?.tagSlug).toBe("operations-2");
+    expect(
+      tags.map((tag) => ({ name: tag.name, slug: tag.slug }))
+    ).toStrictEqual([
+      { name: "!!!", slug: "operations" },
+      { name: "???", slug: "operations-2" },
     ]);
   });
 
   it("resolves an operation object out of its spec document", () => {
     const { operations } = extractOperations(SPEC_3_1, "/api");
-    const spec = { document: SPEC_3_1 } as unknown as ApiSpecData;
+    // SAFETY: operationObject only reads `spec.document`; the other
+    // ApiSpecData fields never matter to this lookup.
+    const spec = { document: SPEC_3_1 } as ApiSpecData;
     const addPet = operations.find((op) => op.key === "addpet");
     if (!addPet) {
       throw new Error("addpet operation missing");
@@ -523,8 +710,93 @@ describe("parse.parseSpec remote hardening", () => {
       );
       expect(document.info?.title).toBe("Remote");
       expect(stub.calls).toBe(2);
-      const headers = stub.lastInit?.headers as Record<string, string>;
-      expect(headers["user-agent"]).toContain("blume");
+      expect(new Headers(stub.lastInit?.headers).get("user-agent")).toContain(
+        "blume"
+      );
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("honors a sane Retry-After on a rate-limited response", async () => {
+    const original = globalThis.fetch;
+    const stub = queued([
+      new Response("slow down", {
+        headers: { "retry-after": "1" },
+        status: 429,
+      }),
+      Response.json(remoteSpec),
+    ]);
+    globalThis.fetch = stub.fetch;
+    const started = performance.now();
+    try {
+      const { document } = await parseSpec(
+        "https://api.test/openapi.json",
+        "/"
+      );
+      expect(document.info?.title).toBe("Remote");
+      expect(stub.calls).toBe(2);
+      // The server's 1s wait replaces the 500ms base backoff (it does not
+      // stack on top of it, which would be ~1.5s).
+      const waited = performance.now() - started;
+      expect(waited).toBeGreaterThanOrEqual(950);
+      expect(waited).toBeLessThan(1450);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("honors the HTTP-date form of Retry-After", async () => {
+    const original = globalThis.fetch;
+    const stub = queued([
+      new Response("slow down", {
+        // RFC 9110's other spelling: an absolute date instead of seconds.
+        headers: { "retry-after": new Date(Date.now() + 1000).toUTCString() },
+        status: 429,
+      }),
+      Response.json(remoteSpec),
+    ]);
+    globalThis.fetch = stub.fetch;
+    const started = performance.now();
+    try {
+      const { document } = await parseSpec(
+        "https://api.test/openapi.json",
+        "/"
+      );
+      expect(document.info?.title).toBe("Remote");
+      expect(stub.calls).toBe(2);
+      // toUTCString truncates to whole seconds, so allow up to a second of
+      // slack below the nominal 1s wait.
+      const waited = performance.now() - started;
+      expect(waited).toBeGreaterThanOrEqual(450);
+      expect(waited).toBeLessThan(1450);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("ignores an unparseable Retry-After and backs off normally", async () => {
+    const original = globalThis.fetch;
+    const stub = queued([
+      new Response("slow down", {
+        headers: { "retry-after": "soonish" },
+        status: 429,
+      }),
+      Response.json(remoteSpec),
+    ]);
+    globalThis.fetch = stub.fetch;
+    const started = performance.now();
+    try {
+      const { document } = await parseSpec(
+        "https://api.test/openapi.json",
+        "/"
+      );
+      expect(document.info?.title).toBe("Remote");
+      expect(stub.calls).toBe(2);
+      // No usable header: only p-retry's 500ms base backoff applies.
+      const waited = performance.now() - started;
+      expect(waited).toBeGreaterThanOrEqual(450);
+      expect(waited).toBeLessThan(950);
     } finally {
       globalThis.fetch = original;
     }
@@ -547,10 +819,10 @@ describe("parse.parseSpec remote hardening", () => {
   it("retries a thrown network error, then rethrows it", async () => {
     const original = globalThis.fetch;
     let calls = 0;
-    globalThis.fetch = (() => {
+    globalThis.fetch = asFetch(() => {
       calls += 1;
       return Promise.reject(new Error("ECONNRESET"));
-    }) as unknown as typeof fetch;
+    });
     try {
       await expect(
         parseSpec("https://api.test/openapi.json", "/")
@@ -676,6 +948,8 @@ describe("parse.parseSpec remote hardening", () => {
 
 describe("render-mdx", () => {
   const specData = (over: Partial<ApiSpecData> = {}): ApiSpecData =>
+    // SAFETY: render-mdx never reads `kind` — the only ApiSpecData field these
+    // defaults omit.
     ({
       codeSamples: [],
       description: "",
@@ -683,6 +957,7 @@ describe("render-mdx", () => {
       expandSchemas: false,
       label: "API",
       operations: {},
+      playground: { enabled: true, proxy: false },
       route: "/api",
       slug: "api",
       tags: [],
@@ -839,6 +1114,73 @@ describe("render-mdx", () => {
     expect(page.body).not.toContain('&#123;"petId"');
   });
 
+  it("leaves a tilde fence verbatim while escaping surrounding prose", () => {
+    const op = {
+      deprecated: false,
+      description: [
+        "Response shape with {inline} braces:",
+        "",
+        "~~~json",
+        '{"name": "doggie"}',
+        "~~~~",
+        "",
+        "More {prose} after.",
+      ].join("\n"),
+      key: "op",
+      method: "get" as const,
+      operationId: "op",
+      path: "/x",
+      route: "/api/x/op",
+      summary: "Do a thing",
+      tag: "x",
+      tagSlug: "x",
+    };
+    const page = operationMdx(specData(), op);
+    // Tilde fences are code in MDX like backtick fences; the body must pass
+    // through untouched (a longer closing run still closes per CommonMark).
+    expect(page.body).toContain('~~~json\n{"name": "doggie"}\n~~~~');
+    expect(page.body).toContain("&#123;inline&#125;");
+    expect(page.body).toContain("More &#123;prose&#125; after.");
+  });
+
+  it("escapes braces in indented blocks, which MDX has no code form for", () => {
+    const page = operationMdx(specData(), {
+      deprecated: false,
+      // CommonMark would call the indented line a code block, but MDX
+      // disables indented code — it compiles as a paragraph, so its braces
+      // must be escaped like any other prose.
+      description: 'Sample:\n\n    {"indented": true}\n\nAfter {prose}.',
+      key: "op",
+      method: "get" as const,
+      operationId: "op",
+      path: "/x",
+      route: "/api/x/op",
+      summary: "Do a thing",
+      tag: "x",
+      tagSlug: "x",
+    });
+    expect(page.body).toContain('&#123;"indented": true&#125;');
+    expect(page.body).toContain("After &#123;prose&#125;.");
+  });
+
+  it("treats an unclosed tilde fence as running to the end of the text", () => {
+    const page = operationMdx(specData(), {
+      deprecated: false,
+      description: 'Before {braces}.\n\n~~~\n{"open": true}',
+      key: "op",
+      method: "get" as const,
+      operationId: "op",
+      path: "/x",
+      route: "/api/x/op",
+      summary: "Do a thing",
+      tag: "x",
+      tagSlug: "x",
+    });
+    expect(page.body).toContain("Before &#123;braces&#125;.");
+    expect(page.body).toContain('~~~\n{"open": true}');
+    expect(page.body).not.toContain('&#123;"open"');
+  });
+
   it("keeps a double-backtick span verbatim and escapes an unbalanced run", () => {
     const balanced = operationMdx(specData(), {
       deprecated: false,
@@ -934,6 +1276,8 @@ describe("render-mdx", () => {
       tag: "pet",
       tagSlug: "pet",
     };
+    // SAFETY: operationMdx always writes `seo.description` for an operation
+    // with a summary, which the fixture above declares.
     const { description } = operationMdx(specData(), op).data.seo as {
       description: string;
     };
@@ -945,6 +1289,59 @@ describe("render-mdx", () => {
     expect(description).not.toContain("second paragraph");
     // Truncation cuts on a word boundary, never mid-word.
     expect(description).toContain("…");
+  });
+
+  it("caps a fullwidth meta description by display columns", () => {
+    // 100 fullwidth characters are within the 160-character cap but render
+    // ~200 columns wide — the audit, which grades in display columns, would
+    // flag every generated operation page as "too long" with no fix short of
+    // editing the upstream spec. The clip must budget in the same columns.
+    const op = {
+      deprecated: false,
+      description: "あ".repeat(100),
+      key: "op",
+      method: "get" as const,
+      operationId: "op",
+      path: "/pet",
+      route: "/api/pet/op",
+      summary: "List pets",
+      tag: "pet",
+      tagSlug: "pet",
+    };
+    // SAFETY: operationMdx always writes `seo.description` for an operation
+    // with a summary, which the fixture above declares.
+    const { description } = operationMdx(specData(), op).data.seo as {
+      description: string;
+    };
+    expect(stringWidth(description)).toBeLessThanOrEqual(160);
+    expect(description).toContain("…");
+    expect(description).toEndWith("API.");
+  });
+
+  it("keeps literal punctuation intact in the meta description", () => {
+    // The old regex strip deleted every *_`#> character, mangling prose that
+    // legitimately contains them: snake_case → snakecase, C# → C.
+    const op = {
+      deprecated: false,
+      description:
+        "Filter by `user_id` or a C# client. Sorts use snake_case keys.",
+      key: "op",
+      method: "get" as const,
+      operationId: "op",
+      path: "/pets",
+      route: "/api/pets/op",
+      summary: "List pets",
+      tag: "pet",
+      tagSlug: "pet",
+    };
+    // SAFETY: operationMdx always writes `seo.description` for an operation
+    // with a summary, which the fixture above declares.
+    const { description } = operationMdx(specData(), op).data.seo as {
+      description: string;
+    };
+    expect(description).toContain("user_id");
+    expect(description).toContain("C# client");
+    expect(description).toContain("snake_case keys");
   });
 
   it("falls back to the API name when a long endpoint leaves no room for prose", () => {
@@ -960,6 +1357,8 @@ describe("render-mdx", () => {
       tag: "x",
       tagSlug: "x",
     };
+    // SAFETY: operationMdx always writes `seo.description` for an operation
+    // with a summary, which the fixture above declares.
     const { description } = operationMdx(specData(), op).data.seo as {
       description: string;
     };
@@ -989,7 +1388,7 @@ describe("render-mdx", () => {
   });
 
   it("renders one overview section per tag slug, not per tag name", () => {
-    const document = {
+    const document = asDocument({
       info: { title: "API", version: "1" },
       openapi: "3.1.0",
       paths: {
@@ -1000,7 +1399,7 @@ describe("render-mdx", () => {
         { description: "", name: "Store" },
         { description: "", name: "store" },
       ],
-    } as unknown as ApiDocument;
+    });
     const { operations, tags } = extractOperations(document, "/api");
     const page = overviewMdx(
       specData({
@@ -1099,7 +1498,11 @@ describe("source.openApiSource", () => {
     const reference = {
       ...indexedReference,
       basePath: "",
-      display: { codeSamples: ["curl"], expandSchemas: false },
+      display: {
+        codeSamples: ["curl"],
+        expandSchemas: false,
+        playground: { enabled: true, proxy: false },
+      },
       kind: "openapi" as const,
       label: "API",
       renderer: "blume" as const,
@@ -1110,13 +1513,19 @@ describe("source.openApiSource", () => {
     const source = openApiSource([reference], ctx(dir));
     expect(isOpenApiSource(source)).toBe(true);
 
-    const { entries, diagnostics } = await source.load();
+    const { entries, diagnostics, folderMeta } = await source.load();
     expect(diagnostics).toStrictEqual([]);
     // 3 operations + 1 overview index.
     expect(entries).toHaveLength(4);
     const refs = entries.map((entry) => entry.ref);
     expect(refs).toContain("api/pet/addpet.mdx");
     expect(refs.at(-1)).toBe("api/index.mdx");
+    // Each tag directory is labeled with the spec's own tag name, so the
+    // sidebar group renders the authored casing instead of a re-humanized slug.
+    expect(folderMeta).toStrictEqual({
+      "api/operations": { title: "Operations" },
+      "api/pet": { title: "pet" },
+    });
 
     const data = source.openApiData();
     expect(data.api?.title).toBe("Petstore");
@@ -1129,7 +1538,11 @@ describe("source.openApiSource", () => {
     const reference = {
       ...indexedReference,
       basePath: "/docs",
-      display: { codeSamples: [], expandSchemas: false },
+      display: {
+        codeSamples: [],
+        expandSchemas: false,
+        playground: { enabled: true, proxy: false },
+      },
       kind: "openapi" as const,
       label: "API",
       renderer: "blume" as const,
@@ -1158,7 +1571,11 @@ describe("source.openApiSource", () => {
     const reference = {
       ...indexedReference,
       basePath: "",
-      display: { codeSamples: [], expandSchemas: false },
+      display: {
+        codeSamples: [],
+        expandSchemas: false,
+        playground: { enabled: true, proxy: false },
+      },
       kind: "openapi" as const,
       label: "API",
       renderer: "blume" as const,
@@ -1185,7 +1602,11 @@ describe("source.openApiSource", () => {
     const reference = {
       ...indexedReference,
       basePath: "",
-      display: { codeSamples: [], expandSchemas: false },
+      display: {
+        codeSamples: [],
+        expandSchemas: false,
+        playground: { enabled: true, proxy: false },
+      },
       kind: "openapi" as const,
       label: "API",
       renderer: "blume" as const,
@@ -1212,7 +1633,11 @@ describe("source.openApiSource", () => {
     const reference = {
       ...indexedReference,
       basePath: "",
-      display: { codeSamples: [], expandSchemas: false },
+      display: {
+        codeSamples: [],
+        expandSchemas: false,
+        playground: { enabled: true, proxy: false },
+      },
       kind: "openapi" as const,
       label: "API",
       renderer: "blume" as const,
@@ -1238,7 +1663,11 @@ describe("source.openApiSource", () => {
       collisions: [
         "Two API reference sources resolve to /api; keeping the first.",
       ],
-      display: { codeSamples: [], expandSchemas: false },
+      display: {
+        codeSamples: [],
+        expandSchemas: false,
+        playground: { enabled: true, proxy: false },
+      },
       kind: "openapi" as const,
       label: "API",
       renderer: "blume" as const,
@@ -1258,7 +1687,11 @@ describe("source.openApiSource", () => {
   const missingReference = {
     ...indexedReference,
     basePath: "",
-    display: { codeSamples: [], expandSchemas: false },
+    display: {
+      codeSamples: [],
+      expandSchemas: false,
+      playground: { enabled: true, proxy: false },
+    },
     kind: "openapi" as const,
     label: "API",
     renderer: "blume" as const,
@@ -1293,7 +1726,11 @@ describe("source.openApiSource", () => {
     const reference = {
       ...indexedReference,
       basePath: "",
-      display: { codeSamples: [], expandSchemas: false },
+      display: {
+        codeSamples: [],
+        expandSchemas: false,
+        playground: { enabled: true, proxy: false },
+      },
       kind: "openapi" as const,
       label: "API",
       renderer: "blume" as const,
@@ -1332,12 +1769,54 @@ describe("source.openApiSource", () => {
       await rm(cacheDir, { force: true, recursive: true });
     }
   });
+
+  it("labels tag sidebar groups with the spec's own tag name", async () => {
+    const root = await mkdtemp(join(tmpdir(), "blume-openapi-nav-"));
+    try {
+      await mkdir(join(root, "docs"), { recursive: true });
+      await writeFile(
+        join(root, "blume.config.ts"),
+        'export default {\n  openapi: { enabled: true, route: "/api", spec: "./openapi.json" },\n};\n'
+      );
+      await writeFile(join(root, "docs/index.md"), "# Home\n");
+      await writeFile(
+        join(root, "openapi.json"),
+        JSON.stringify({
+          info: { title: "API", version: "1" },
+          openapi: "3.1.0",
+          paths: {
+            "/token": {
+              post: {
+                operationId: "createToken",
+                summary: "Create token",
+                tags: ["OAuth2"],
+              },
+            },
+          },
+        })
+      );
+      const project = await scanProject(root);
+      const labels: string[] = [];
+      const walk = (nodes: NavNode[]): void => {
+        for (const node of nodes) {
+          if (node.kind === "group") {
+            labels.push(node.label);
+            walk(node.children);
+          }
+        }
+      };
+      walk(project.graph.navigation.sidebar);
+      // The group label is the tag name the spec authored, not a re-humanized
+      // slug ("Oauth2").
+      expect(labels).toContain("OAuth2");
+      expect(labels).not.toContain("Oauth2");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
 });
 
-const schemas = (SPEC_3_1.components?.schemas ?? {}) as unknown as Record<
-  string,
-  SchemaLike
->;
+const schemas = SPEC_SCHEMAS;
 
 describe("helpers", () => {
   it("resolves refs and names them", () => {
@@ -1398,14 +1877,14 @@ describe("helpers", () => {
       items: { $ref: "#/components/schemas/Node" },
       type: "array",
     };
-    const cyclic: Record<string, SchemaLike> = {
+    const cyclic = {
       Chicken: { allOf: [{ $ref: "#/components/schemas/Egg" }] },
       Egg: {
         allOf: [{ $ref: "#/components/schemas/Chicken" }],
         properties: { id: { type: "string" } },
       },
       Node: node,
-    };
+    } satisfies Record<string, SchemaLike>;
     // Array-of-self labels by ref name instead of recursing forever.
     expect(typeLabel(node)).toBe("Node[]");
     expect(typeLabel({ $ref: "#/components/schemas/Node" })).toBe("Node");
@@ -1421,17 +1900,10 @@ describe("helpers", () => {
   });
 
   it("builds example values and guards circular refs", () => {
-    const pet = exampleValue(
-      { $ref: "#/components/schemas/Pet" },
-      schemas
-    ) as Record<string, unknown>;
-    expect(pet.name).toBe("doggie");
-    expect(pet.status).toBe("available");
+    const pet = exampleValue({ $ref: "#/components/schemas/Pet" }, schemas);
+    expect(pet).toMatchObject({ name: "doggie", status: "available" });
     // Tag is self-referential; the guard stops it resolving forever.
-    const tag = exampleValue(
-      { $ref: "#/components/schemas/Tag" },
-      schemas
-    ) as Record<string, unknown>;
+    const tag = exampleValue({ $ref: "#/components/schemas/Tag" }, schemas);
     expect(tag).toHaveProperty("name");
     expect(exampleValue({ type: "boolean" }, schemas)).toBe(true);
     expect(exampleValue({ format: "date-time", type: "string" }, schemas)).toBe(
@@ -1556,7 +2028,8 @@ describe("helpers.mergeParameters", () => {
 
 describe("snippets", () => {
   it("builds a request sample and renders each language", () => {
-    const operation = {
+    const model = operationModel({
+      method: "post",
       parameters: [
         {
           example: 7,
@@ -1577,17 +2050,15 @@ describe("snippets", () => {
           schema: { type: "string" },
         },
       ],
+      path: "/pet/{petId}",
       requestBody: {
         content: { "application/json": { schema: { type: "object" } } },
       },
-    };
-    const sample = buildRequestSample(
-      operation,
-      "post",
-      "/pet/{petId}",
-      [{ url: "https://api.test/v1/" }],
-      schemas
-    );
+      schemas,
+      security: { alternatives: [], optional: false },
+      servers: [{ url: "https://api.test/v1/" }],
+    });
+    const sample = buildRequest(model, defaultValues(model));
     expect(sample.method).toBe("POST");
     expect(sample.url).toBe("https://api.test/v1/pet/7?verbose=true");
     expect(sample.headers["Content-Type"]).toBe("application/json");
@@ -1619,6 +2090,25 @@ describe("snippets", () => {
     expect(python).toContain('"note": "it\'s true"');
     expect(python).toContain('"active": True');
     expect(python).toContain('"tags": None');
+  });
+
+  it("keeps JS and Python samples syntactically valid mid-edit", () => {
+    // While the body editor holds invalid JSON (no `bodyValue` mirror), the
+    // raw text can't be inlined as a JS/Python expression — it travels as a
+    // string literal instead, matching what the live send transmits.
+    const sample = {
+      body: '{"count": 2',
+      headers: {},
+      method: "POST",
+      url: "https://api.test/v1/pet",
+    };
+    const [js, python] = sampleLanguages(["js", "python"]).map((language) =>
+      language.build(sample)
+    );
+    expect(js).toContain(String.raw`body: "{\"count\": 2"`);
+    expect(js).not.toContain("JSON.stringify(");
+    expect(python).toContain(String.raw`data="{\"count\": 2"`);
+    expect(python).not.toContain("json=");
   });
 
   it("resolves language ids through aliases and drops unknowns", () => {
@@ -1704,8 +2194,10 @@ describe("security", () => {
       "read:pets",
       "write:pets",
     ]);
+    // SAFETY: the scopes are deliberately a bare string — spec-invalid input
+    // the resolver must ignore instead of crashing on.
     const malformed = resolveSecurity(
-      [{ oauth: "read" }] as unknown as Record<string, string[]>[],
+      [{ oauth: "read" as string | string[] }] as SecurityRequirementLike[],
       SCHEMES
     );
     expect(malformed.alternatives[0]?.[0]?.scopes).toStrictEqual([]);
@@ -1753,51 +2245,17 @@ describe("security", () => {
     expect(schemeCarrier({ key: "ghost", scopes: [] })).toBeUndefined();
   });
 
-  it("builds placeholder credentials from the first alternative only", () => {
-    const security = resolveSecurity(
-      [{ apiCookie: [], apiHeader: [], apiQuery: [], bearerAuth: [] }],
-      SCHEMES
-    );
-    const auth = sampleAuth(security);
-    expect(auth.headers.Authorization).toBe("Bearer YOUR_TOKEN");
-    expect(auth.headers["X-Api-Key"]).toBe("YOUR_API_KEY");
-    expect(auth.headers.Cookie).toBe("session=YOUR_API_KEY");
-    expect(auth.query).toStrictEqual({ api_key: "YOUR_API_KEY" });
-
-    const second = sampleAuth(
-      resolveSecurity([{ basicAuth: [] }, { apiHeader: [] }], SCHEMES)
-    );
-    expect(second.headers).toStrictEqual({
-      Authorization: "Basic YOUR_CREDENTIALS",
-    });
-
-    // OAuth2 (and OpenID Connect) degrade to a bearer access token.
-    expect(
-      sampleAuth(resolveSecurity([{ oauth: ["read:pets"] }], SCHEMES)).headers
-    ).toStrictEqual({ Authorization: "Bearer YOUR_ACCESS_TOKEN" });
-
-    // Mutual TLS travels outside the request; an unknown ref can't be guessed.
-    expect(
-      sampleAuth(resolveSecurity([{ ghost: [], tls: [] }], SCHEMES))
-    ).toStrictEqual({ headers: {}, query: {} });
-
-    // Public operation: nothing to add.
-    expect(sampleAuth(resolveSecurity([], SCHEMES))).toStrictEqual({
-      headers: {},
-      query: {},
-    });
-  });
-
   it("threads auth placeholders into the request sample and snippets", () => {
     const security = resolveSecurity([{ bearerAuth: [] }], SCHEMES);
-    const sample = buildRequestSample(
-      { parameters: [] },
-      "post",
-      "/pet",
-      [{ url: "https://api.test/v1" }],
-      {},
-      sampleAuth(security)
-    );
+    const model = operationModel({
+      method: "post",
+      parameters: [],
+      path: "/pet",
+      schemas: {},
+      security,
+      servers: [{ url: "https://api.test/v1" }],
+    });
+    const sample = buildRequest(model, defaultValues(model));
     expect(sample.headers.Authorization).toBe("Bearer YOUR_TOKEN");
     const [curl] = sampleLanguages(["curl"]).map((language) =>
       language.build(sample)
@@ -1807,23 +2265,22 @@ describe("security", () => {
 
   it("appends a query API key to the sample URL", () => {
     const security = resolveSecurity([{ apiQuery: [] }], SCHEMES);
-    const sample = buildRequestSample(
-      {
-        parameters: [
-          {
-            in: "query",
-            name: "verbose",
-            required: true,
-            schema: { type: "boolean" },
-          },
-        ],
-      },
-      "get",
-      "/pet",
-      [{ url: "https://api.test/v1" }],
-      {},
-      sampleAuth(security)
-    );
+    const model = operationModel({
+      method: "get",
+      parameters: [
+        {
+          in: "query",
+          name: "verbose",
+          required: true,
+          schema: { type: "boolean" },
+        },
+      ],
+      path: "/pet",
+      schemas: {},
+      security,
+      servers: [{ url: "https://api.test/v1" }],
+    });
+    const sample = buildRequest(model, defaultValues(model));
     expect(sample.url).toBe(
       "https://api.test/v1/pet?verbose=true&api_key=YOUR_API_KEY"
     );
@@ -1831,45 +2288,43 @@ describe("security", () => {
 
   it("lets an explicit query parameter override the auth placeholder", () => {
     const security = resolveSecurity([{ apiQuery: [] }], SCHEMES);
-    const sample = buildRequestSample(
-      {
-        parameters: [
-          {
-            example: "from-the-spec",
-            in: "query",
-            name: "api_key",
-            required: true,
-          },
-        ],
-      },
-      "get",
-      "/pet",
-      [{ url: "https://api.test/v1" }],
-      {},
-      sampleAuth(security)
-    );
+    const model = operationModel({
+      method: "get",
+      parameters: [
+        {
+          example: "from-the-spec",
+          in: "query",
+          name: "api_key",
+          required: true,
+        },
+      ],
+      path: "/pet",
+      schemas: {},
+      security,
+      servers: [{ url: "https://api.test/v1" }],
+    });
+    const sample = buildRequest(model, defaultValues(model));
     expect(sample.url).toBe("https://api.test/v1/pet?api_key=from-the-spec");
   });
 
   it("lets an explicit header parameter override the auth placeholder", () => {
     const security = resolveSecurity([{ bearerAuth: [] }], SCHEMES);
-    const sample = buildRequestSample(
-      {
-        parameters: [
-          {
-            example: "Bearer from-the-spec",
-            in: "header",
-            name: "Authorization",
-            required: true,
-          },
-        ],
-      },
-      "get",
-      "/pet",
-      [{ url: "https://api.test/v1" }],
-      {},
-      sampleAuth(security)
-    );
+    const model = operationModel({
+      method: "get",
+      parameters: [
+        {
+          example: "Bearer from-the-spec",
+          in: "header",
+          name: "Authorization",
+          required: true,
+        },
+      ],
+      path: "/pet",
+      schemas: {},
+      security,
+      servers: [{ url: "https://api.test/v1" }],
+    });
+    const sample = buildRequest(model, defaultValues(model));
     expect(sample.headers.Authorization).toBe("Bearer from-the-spec");
   });
 });

@@ -1,7 +1,7 @@
 ---
 title: CLI
 description: >-
-  Jeder Blume-Befehl und jedes Flag an einem Ort erklärt — init, dev, build, preview, add, sync und eject — zusammen mit den Optionen, die jeder davon akzeptiert.
+  Jeder Blume-Befehl und jedes Flag an einem Ort erklärt, zusammen mit den Optionen, die jeder davon akzeptiert.
 ---
 
 ```bash
@@ -25,6 +25,7 @@ blume <command> [options]
 | `blume audit` | Die gebaute Site auf SEO- und Gesundheitsprobleme prüfen. |
 | `blume eval` | Die Dokumentation testen: Ein Agent beantwortet deine Fragen ausschließlich anhand der Dokumentation. |
 | `blume translate` | Die Dokumentation mit einer lokalen Agent-CLI in die konfigurierten Sprachen übersetzen. |
+| `blume version [id]` | Die aktuelle Dokumentation als [archivierte Version](/docs/content/versioning) einfrieren (ohne id werden die konfigurierten Versionen aufgelistet). |
 
 ## Gängige Flags
 
@@ -123,7 +124,7 @@ Ohne eine `tsconfig.json` im Projekt wird nur die generierte Laufzeitumgebung ge
 
 - **Interne Seitenlinks** (`/guides/intro`, `./sibling`) müssen auf eine echte Seite verweisen — defekte werden als Fehler gemeldet.
 - **Ankerlinks** (`#section`, `/guides/intro#setup`) müssen einer Überschrift auf der Zielseite entsprechen — Fehlschläge sind Warnungen.
-- **Asset-Links** (`/logo.png`) werden gegen das Verzeichnis `public/` geprüft.
+- **Asset-Links** werden dort geprüft, wo die Datei liegt: ein absoluter Pfad (`/logo.png`) gegen das Verzeichnis `public/`, eine relative Bildeinbindung (`![](./diagram.png)`) gegen den Ordner der Seite selbst. Ein einfacher Link auf einen relativen Pfad wird weiterhin als Site-Route aufgelöst — nur Bildeinbindungen durchlaufen die Bildpipeline.
 - **Externe Links** werden nur mit `--external` geprüft (standardmäßig aus, da dies das Netzwerk erfordert); tote Links (404/410/nicht erreichbar) sind Fehler, während ratenbegrenzte oder vorübergehende Antworten (403/429/5xx/Timeout) Warnungen sind.
 
 ## Die gebaute Site auditieren

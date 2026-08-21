@@ -147,7 +147,7 @@ export default defineConfig({
 });
 ```
 
-Das Integrationstoken stammt aus der Umgebungsvariable `NOTION_TOKEN` (teile die Datenbank mit deiner Integration). Standardmäßig wird jede Seite importiert; setze `publishedValue`, um die Eigenschaft `Status` zu einer Veröffentlichungssperre zu machen – jeder andere Wert wird dann auf `draft: true` abgebildet, was Produktions-Builds verwerfen. **Notion-Bild-URLs sind signiert und laufen ab**, daher lädt der Adapter sie zur Build-Zeit in die Assets der Website herunter und schreibt die Verweise um – so verdirbt ein CMS-Bild niemals einen statischen Build.
+Das Integrationstoken stammt aus der Umgebungsvariable `NOTION_TOKEN` (teile die Datenbank mit deiner Integration). Standardmäßig wird jede Seite importiert; setze `publishedValue`, um die Eigenschaft `Status` zu einer Veröffentlichungssperre zu machen – jeder andere Wert wird dann auf `draft: true` abgebildet, was Produktions-Builds verwerfen. **Notion-Bild-URLs sind signiert und laufen ab**, daher lädt der Adapter sie zur Build-Zeit in die Assets der Website herunter und schreibt die Verweise um – so verdirbt ein CMS-Bild niemals einen statischen Build. API-Aufrufe werden über einen kleinen Request-Pool getaktet (3 gleichzeitig, passend zum Rate-Limit pro Integration bei Notion), sodass sich Datenbanken mit Hunderten von Seiten importieren lassen, ohne `429`-Antworten auszulösen; setze `concurrency` an der Quelle, um das anzupassen.
 
 ## Preview und Sync
 

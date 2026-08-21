@@ -264,7 +264,7 @@ const ScenePivot = () => (
 );
 
 // ─── Scene 6 · The build ────────────────────────────────────────────────────
-// The same frosted card: `blume build` emits every discovery artifact, then
+// The same frosted card: `bedocs build` emits every discovery artifact, then
 // `tree dist/.well-known` shows what landed.
 const SceneBuild = () => <AgentBuild />;
 
@@ -305,8 +305,9 @@ const SceneCta = () => (
 const SceneLogo = () => <BlumeLogo color={WHITE} wordmarkSize={122} />;
 
 // Wire the shipped Geist faces to the CSS variables every remocn component
-// reads (`var(--font-geist-sans)` / `var(--font-geist-mono)`). Asserted because
-// CSSProperties doesn't type custom `--*` keys in this @types/react version.
+// reads (`var(--font-geist-sans)` / `var(--font-geist-mono)`).
+// SAFETY: the object holds only `--*` custom properties — valid inline style
+// keys that CSSProperties cannot type in this @types/react version.
 const FONT_VARS = {
   "--font-geist-mono": GEIST_MONO,
   "--font-geist-sans": GEIST_SANS,

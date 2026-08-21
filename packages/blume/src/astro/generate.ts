@@ -12,11 +12,13 @@ import {
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 
+import { imageSize } from "image-size";
+import pMap from "p-map";
 import { basename, dirname, join, normalize, relative, resolve } from "pathe";
 import { glob } from "tinyglobby";
 
 import { buildAskData } from "../ai/ask-data.ts";
-import { resolveAskBackend } from "../ai/ask.ts";
+import { askBackendRuntimeDep, resolveAskBackend } from "../ai/ask.ts";
 import { buildRawMarkdown, markdownRoutePaths } from "../ai/markdown.ts";
 import { buildMcpData } from "../ai/mcp/data.ts";
 import { buildMcpDiscovery, buildMcpServerCard } from "../ai/mcp/discovery.ts";
@@ -48,6 +50,7 @@ import { buildRssFeeds, renderRssFeed } from "../deploy/rss.ts";
 import { missingFontFiles, resolveOgFonts } from "../og/derive.ts";
 import type { DerivedOgFonts } from "../og/derive.ts";
 import { resolveOgLogo } from "../og/logo.ts";
+import type { OpenApiData } from "../openapi/model.ts";
 import { hasScalarReferences, referenceRoutes } from "../openapi/references.ts";
 import { buildReferenceFiles } from "../openapi/scalar.ts";
 import { isOpenApiSource } from "../openapi/source.ts";
@@ -59,7 +62,7 @@ import {
   examplesEntryTemplate,
   tailwindEntryTemplate,
 } from "../theme/entry.ts";
-import { buildFontsCss, configuredCssVars } from "../theme/fonts.ts";
+import { buildFontsCss, configuredFonts } from "../theme/fonts.ts";
 import { buildThemeCss } from "../theme/palette.ts";
 import { twoslashCss } from "../theme/twoslash.ts";
 import { planComponentSlots } from "./component-slots.ts";
@@ -92,6 +95,7 @@ import {
   mixedbreadSearchEndpointTemplate,
   notFoundPageTemplate,
   ogEndpointTemplate,
+  playgroundProxyTemplate,
   rawMarkdownEndpointTemplate,
   rssEndpointTemplate,
   runtimeDirWithin,
@@ -104,7 +108,7 @@ import {
   stagedContentDir,
 } from "./templates.ts";
 
-/** Absolute path to the BeDocs package `src` directory. */
+/** Absolute path to the Blume package `src` directory. */
 const BLUME_SRC = join(packageRoot(), "src");
 
 /** Whether a module specifier resolves from a directory via node resolution. */
@@ -118,13 +122,13 @@ const canResolveFrom = (fromDir: string, spec: string): boolean => {
 };
 
 /**
- * Absolute path to `babel-plugin-react-compiler`, resolved from BeDocs's own
- * package root (BeDocs ships it). Returns null when React or the compiler is off.
+ * Absolute path to `babel-plugin-react-compiler`, resolved from Blume's own
+ * package root (Blume ships it). Returns null when React or the compiler is off.
  *
  * The path must be absolute: @vitejs/plugin-react resolves babel plugins from
- * the *project* root, not `.bedocs/`, so a bare specifier fails in a user project
+ * the *project* root, not `.blume/`, so a bare specifier fails in a user project
  * that never installed the plugin directly. Resolving from `packageRoot()` binds
- * to BeDocs's shipped copy regardless of the user's package manager or hoisting.
+ * to Blume's shipped copy regardless of the user's package manager or hoisting.
  */
 export const resolveReactCompiler = (
   config: ResolvedConfig,
@@ -155,7 +159,7 @@ export const reactCompilerWarnings = (
 ): string[] =>
   needsReact && config.react.compiler && !compilerPath
     ? [
-        "React Compiler is enabled but `babel-plugin-react-compiler` could not be resolved; falling back to an uncompiled build. Reinstall BeDocs, or set `react: { compiler: false }` to silence this.",
+        "React Compiler is enabled but `babel-plugin-react-compiler` could not be resolved; falling back to an uncompiled build. Reinstall Blume, or set `react: { compiler: false }` to silence this.",
       ]
     : [];
 
@@ -174,7 +178,7 @@ const resolveAstroPackageJson = (modulesDir: string): string | null => {
  * `node_modules` directory the walk found it in — or null when none resolves.
  *
  * This deliberately does not use `createRequire().resolve()`. pnpm's generated
- * bin shim adds BeDocs's virtual-store dependencies to `NODE_PATH`, which
+ * bin shim adds Blume's virtual-store dependencies to `NODE_PATH`, which
  * CommonJS resolution honors but ESM package resolution ignores. The generated
  * Astro config uses ESM imports, so treating a NODE_PATH-only result as
  * reachable skips the dependency link and makes `import "astro/config"` fail.
@@ -183,7 +187,7 @@ const resolveAstroPackageJson = (modulesDir: string): string | null => {
  *
  * The containing directory matters as much as the package: under an isolated
  * linker the walk can find a store-deduped astro in a directory that holds
- * nothing else of BeDocs's, so "the right astro resolves" does not imply "the
+ * nothing else of Blume's, so "the right astro resolves" does not imply "the
  * integrations resolve" — callers must check where the hit came from.
  */
 const resolvedAstroHit = (
@@ -217,12 +221,12 @@ export const sameRealDir = (a: string, b: string): boolean => {
 };
 
 /**
- * The two places an installer can put BeDocs's dependencies:
+ * The two places an installer can put Blume's dependencies:
  *   - `<blume>/node_modules` — deps nested under the package (workspace source,
  *     or npm nesting them away from a conflicting hoisted copy)
  *   - `dirname(<blume>)`     — deps as siblings in the store (isolated/pnpm)
  *
- * `packageRoot()` resolves to BeDocs's real on-disk path (Node follows the
+ * `packageRoot()` resolves to Blume's real on-disk path (Node follows the
  * install symlink), so its parent is the store's package directory where the
  * isolated linker places the siblings.
  */
@@ -240,22 +244,22 @@ const candidateHolding = (
   null;
 
 /**
- * Locate the directory that holds BeDocs's installed dependencies (Astro and its
+ * Locate the directory that holds Blume's installed dependencies (Astro and its
  * integrations).
  *
  * With a clean hoisted install this is moot — the deps sit in a `node_modules`
- * the generated `.bedocs/` already walks up into, and {@link ensureDepsLink}
+ * the generated `.blume/` already walks up into, and {@link ensureDepsLink}
  * short-circuits before we need it. But under isolated linkers (Bun's
- * `isolated` mode, pnpm) BeDocs's deps are NOT hoisted into the project; they
- * live beside the BeDocs package in a virtual store, invisible to the upward
- * walk from `.bedocs/` — so probe the {@link depsCandidates}.
+ * `isolated` mode, pnpm) Blume's deps are NOT hoisted into the project; they
+ * live beside the Blume package in a virtual store, invisible to the upward
+ * walk from `.blume/` — so probe the {@link depsCandidates}.
  *
  * Astro alone is a bad probe: an npm split install (an `overrides` pin plus an
- * incremental install) hoists `astro` to the project root while BeDocs's other
+ * incremental install) hoists `astro` to the project root while Blume's other
  * deps stay nested, and probing for astro then picks the root directory — one
  * that holds none of them. Prefer a candidate with the full set (astro beside
  * `@astrojs/mdx`, the integration every generated runtime declares), then one
- * with the integrations (astro hoisted away — the rest of BeDocs's deps sit
+ * with the integrations (astro hoisted away — the rest of Blume's deps sit
  * there too), then one with astro alone.
  */
 const holdsAstro = (dir: string): boolean => existsSync(join(dir, "astro"));
@@ -273,7 +277,7 @@ export const blumeDepsDir = (pkgDir: string = packageRoot()): string | null => {
 };
 
 /**
- * Point `link` at BeDocs's dependency directory via a `node_modules` junction,
+ * Point `link` at Blume's dependency directory via a `node_modules` junction,
  * replacing a stale junction we own and leaving a real directory untouched.
  *
  * `lstat`, not `existsSync`, so a broken junction (target since moved) is still
@@ -324,9 +328,9 @@ const readPkgVersion = (pkgJsonPath: string | null): string | null => {
 
 /**
  * Build the diagnostic for a split-layout Astro conflict that a symlink can't
- * repair: a different Astro is hoisted to the project root, shadowing BeDocs's,
+ * repair: a different Astro is hoisted to the project root, shadowing Blume's,
  * and `@astrojs/mdx` binds to the wrong copy. `blumeAstroPkg`/`shadowAstroPkg`
- * are the resolved `astro/package.json` paths for BeDocs's set and the one the
+ * are the resolved `astro/package.json` paths for Blume's set and the one the
  * runtime actually resolves.
  */
 const astroConflictWarning = (
@@ -337,24 +341,24 @@ const astroConflictWarning = (
   const shadow = readPkgVersion(shadowAstroPkg);
   const versions =
     blume && shadow
-      ? `astro@${shadow} shadowing BeDocs's astro@${blume}`
-      : "a second copy of Astro shadowing BeDocs's";
-  const pin = blume ?? "<BeDocs's astro version>";
-  return `Astro version conflict: another dependency hoisted ${versions} to the project root, so @astrojs/mdx binds to the wrong copy and the build fails on a missing export (e.g. "chunkToString"). A single symlink can't reconcile a split install — pin BeDocs's Astro by adding a package.json "overrides" (npm/bun/pnpm) or "resolutions" (yarn) entry { "astro": "${pin}" }, then reinstall. Run \`npm ls astro\` to find the dependency pulling the older copy.`;
+      ? `astro@${shadow} shadowing Blume's astro@${blume}`
+      : "a second copy of Astro shadowing Blume's";
+  const pin = blume ?? "<Blume's astro version>";
+  return `Astro version conflict: another dependency hoisted ${versions} to the project root, so @astrojs/mdx binds to the wrong copy and the build fails on a missing export (e.g. "chunkToString"). A single symlink can't reconcile a split install — pin Blume's Astro by adding a package.json "overrides" (npm/bun/pnpm) or "resolutions" (yarn) entry { "astro": "${pin}" }, then reinstall. Run \`npm ls astro\` to find the dependency pulling the older copy.`;
 };
 
 /**
- * Drop a `.bedocs/node_modules` junction that resolves a *different* BeDocs than
+ * Drop a `.blume/node_modules` junction that resolves a *different* Blume than
  * the one running. A restored build cache (e.g. Vercel's) can resurrect the
- * junction pointing into a superseded store directory — bedocs@1.1.0's isolated
+ * junction pointing into a superseded store directory — blume@1.1.0's isolated
  * deps dir after 1.1.1 was installed. Releases rarely bump Astro, so the stale
  * target still resolves the very same astro and every astro-based probe in
- * {@link ensureDepsLink} passes through the link — while the `@beands/bedocs/*` imports
+ * {@link ensureDepsLink} passes through the link — while the `blume/*` imports
  * in the freshly generated config load the previous release, crashing on any
  * export added since. Staleness is judged by realpath: the link is stale
  * exactly when the directory behind it holds a `blume` that isn't `pkgDir`.
  * A target with no `blume` entry (the workspace layout links
- * `packages/blume/node_modules`, which holds only the deps) resolves BeDocs
+ * `packages/blume/node_modules`, which holds only the deps) resolves Blume
  * through the normal ancestor walk and stays. Real directories stay too,
  * mirroring {@link linkDepsJunction} — we only ever remove a link we own.
  */
@@ -385,33 +389,33 @@ const dropStaleDepsLink = async (
 };
 
 /**
- * Make the generated runtime resolve Astro and its integrations against BeDocs's
+ * Make the generated runtime resolve Astro and its integrations against Blume's
  * own dependency set. Three failure modes this repairs:
  *
- *   - Astro is *unreachable* from `.bedocs/` (workspaces under isolated linkers,
+ *   - Astro is *unreachable* from `.blume/` (workspaces under isolated linkers,
  *     pnpm) — the deps live in a store the upward walk can't see.
  *   - Astro *resolves to the wrong copy* — a hoisted sibling pinned an older
- *     major (e.g. `astro@6` for a type-only import) that shadows BeDocs's
+ *     major (e.g. `astro@6` for a type-only import) that shadows Blume's
  *     `astro@7`, so `@astrojs/mdx@7` binds to it and crashes the build on a
  *     missing export. Resolving merely *an* astro isn't enough; it must be the
- *     same one BeDocs uses.
+ *     same one Blume uses.
  *   - The *integrations* are unreachable while astro is fine — npm's split
  *     install. An `overrides` pin plus an incremental `npm install` hoists
- *     astro to the project root (deleting BeDocs's nested copy) but leaves
+ *     astro to the project root (deleting Blume's nested copy) but leaves
  *     `@astrojs/mdx` and friends nested under `blume/node_modules`, where the
- *     upward walk from `.bedocs/` can't see them. The same shape arises under
+ *     upward walk from `.blume/` can't see them. The same shape arises under
  *     an isolated linker when the workspace itself declares astro at a version
- *     matching BeDocs's: the store dedupes both to one copy, so the walk finds
+ *     matching Blume's: the store dedupes both to one copy, so the walk finds
  *     the "correct" astro through the workspace's own direct-dep symlink — in
- *     a node_modules holding none of BeDocs's other deps.
+ *     a node_modules holding none of Blume's other deps.
  *
- * The repair is the same symlink: BeDocs's dependency directory linked in as
- * `.bedocs/node_modules` so the generated config's bare specifiers (`astro`,
+ * The repair is the same symlink: Blume's dependency directory linked in as
+ * `.blume/node_modules` so the generated config's bare specifiers (`astro`,
  * `@astrojs/mdx`, …) bind to a consistent set. That's safe when the linked
  * directory holds the full set, or when it holds only the integrations but the
- * runtime already resolves BeDocs's astro — the junction has no `astro` entry,
+ * runtime already resolves Blume's astro — the junction has no `astro` entry,
  * so astro lookups fall through to the hoisted copy the integrations bind to
- * anyway. What it can't fix is the inverse split: BeDocs's astro nested under a
+ * anyway. What it can't fix is the inverse split: Blume's astro nested under a
  * *conflicting* hoisted astro with the integrations hoisted away from it. No
  * single directory yields a consistent set there; only a root `overrides`/
  * `resolutions` pin does, so we return a diagnostic naming the conflict rather
@@ -428,21 +432,21 @@ export const ensureDepsLink = async (
   }
   const mdxDir = candidateHolding(pkgDir, "@astrojs", "mdx");
   const blumeAstro = resolveAstroPackageJson(astroDir);
-  // Before probing what `.bedocs/` resolves, drop a cache-restored junction
-  // that binds it to a superseded BeDocs — the probes below would otherwise
-  // pass right through it (same astro, older bedocs) and leave it in place.
+  // Before probing what `.blume/` resolves, drop a cache-restored junction
+  // that binds it to a superseded Blume — the probes below would otherwise
+  // pass right through it (same astro, older blume) and leave it in place.
   await dropStaleDepsLink(join(outDir, "node_modules"), pkgDir);
   const outDirHit = resolvedAstroHit(outDir);
-  // `.bedocs/` resolves the very same astro BeDocs's deps provide.
+  // `.blume/` resolves the very same astro Blume's deps provide.
   const astroCorrect = blumeAstro !== null && outDirHit?.pkg === blumeAstro;
-  // Clean hoisted install: astro is correct, found in BeDocs's own dependency
+  // Clean hoisted install: astro is correct, found in Blume's own dependency
   // directory, and the integrations sit beside it — the same walk resolves
   // them too, so there is nothing to do. Requiring the walk to land in
   // `astroDir` itself (not merely resolve an identical astro) matters under
   // isolated linkers: a workspace that declares astro at a version matching
-  // BeDocs's gets a store-deduped symlink in its own node_modules, so the walk
+  // Blume's gets a store-deduped symlink in its own node_modules, so the walk
   // finds the "correct" astro in a directory holding only the workspace's
-  // direct deps — none of BeDocs's integrations (issue #103).
+  // direct deps — none of Blume's integrations (issue #103).
   const walkLandsInDeps =
     astroCorrect &&
     outDirHit !== null &&
@@ -451,33 +455,33 @@ export const ensureDepsLink = async (
     return null;
   }
   // Linking the integrations' directory yields a consistent set when it also
-  // holds BeDocs's astro (the unreachable and repairable-conflict cases) or
+  // holds Blume's astro (the unreachable and repairable-conflict cases) or
   // when the correct astro is reachable without it (the npm split install).
   // Any existing link here is stale and gets replaced.
   if (mdxDir && (mdxDir === astroDir || astroCorrect)) {
     await linkDepsJunction(join(outDir, "node_modules"), mdxDir);
     return null;
   }
-  // Split layout: BeDocs's astro is nested (a conflicting astro took the root
+  // Split layout: Blume's astro is nested (a conflicting astro took the root
   // spot) but @astrojs/mdx hoisted away from it, binding to the shadow. Only a
   // root pin fixes this — surface it.
   return astroConflictWarning(blumeAstro, outDirHit?.pkg ?? null);
 };
 
 /**
- * Vite plugin that makes BeDocs's externalized runtime deps (zod, shiki, sharp,
+ * Vite plugin that makes Blume's externalized runtime deps (zod, shiki, sharp,
  * `takumi-js`, …) resolvable when Astro executes the static prerender
  * bundle under an isolated linker (Bun's `isolated` mode, pnpm).
  *
  * Astro's static build emits a self-contained SSR bundle to
  * `<outDir>/.prerender/` and `import()`s it in-process to generate the HTML.
- * That bundle externalizes BeDocs's render-time deps, so Node resolves them at
+ * That bundle externalizes Blume's render-time deps, so Node resolves them at
  * prerender time by walking up from `.prerender/chunks/*.mjs`. {@link
- * ensureDepsLink} only repairs resolution rooted at `.bedocs/`; `.prerender/`
- * lives under `dist/`, a separate tree an isolated linker never hoists BeDocs's
+ * ensureDepsLink} only repairs resolution rooted at `.blume/`; `.prerender/`
+ * lives under `dist/`, a separate tree an isolated linker never hoists Blume's
  * deps into — so the import dies with `Cannot find package 'zod'`. We drop the
  * same `node_modules` junction into the prerender root, mirroring
- * `.bedocs/node_modules`, so every externalized specifier — native bindings
+ * `.blume/node_modules`, so every externalized specifier — native bindings
  * included, which can't be bundled — resolves. Astro deletes `.prerender/` once
  * generation finishes (and the junction with it: `fs.rm` unlinks symlinks, it
  * never follows them), so nothing leaks into the published `dist/`.
@@ -487,16 +491,29 @@ export const ensureDepsLink = async (
  * (`<build.server>/.prerender/`) output — so it fires for exactly that build.
  * Inert in dev, where there is no build and `writeBundle` never runs.
  */
-export const prerenderDepsPlugin = (
-  pkgDir: string = packageRoot()
-): {
+export interface PrerenderDepsPlugin {
   name: string;
   writeBundle: (options: { dir?: string }) => Promise<void>;
-} => ({
+}
+
+export const prerenderDepsPlugin = (
+  pkgDir: string = packageRoot()
+): PrerenderDepsPlugin => ({
   name: "blume:prerender-deps",
   writeBundle: async (options) => {
     if (!options.dir || basename(options.dir) !== ".prerender") {
       return;
+    }
+    // A hoisted install already resolves externalized packages by walking up
+    // from the prerender output. Avoid placing a Windows junction in that
+    // case: Astro's post-prerender cleanup follows it and can attempt to stat
+    // an optional dependency after its generated bundle has been removed.
+    let ancestor = dirname(options.dir);
+    while (dirname(ancestor) !== ancestor) {
+      if (existsSync(join(ancestor, "node_modules", "astro"))) {
+        return;
+      }
+      ancestor = dirname(ancestor);
     }
     const depsDir = blumeDepsDir(pkgDir);
     if (!depsDir) {
@@ -526,14 +543,16 @@ interface ServerAppResolveContext {
  * Stripping the spurious `.js` and delegating back to Astro's resolver lets the
  * reload complete cleanly, so the renamed route resolves without a restart.
  */
-export const serverAppResolvePlugin = (): {
+export interface ServerAppResolvePlugin {
   enforce: "pre";
   name: string;
   resolveId: (
     this: ServerAppResolveContext,
     id: string
   ) => Promise<string | null>;
-} => ({
+}
+
+export const serverAppResolvePlugin = (): ServerAppResolvePlugin => ({
   enforce: "pre",
   name: "blume:server-app-resolve",
   async resolveId(id) {
@@ -546,25 +565,25 @@ export const serverAppResolvePlugin = (): {
 });
 
 /** Astro integration package each non-React island framework needs installed. */
-const ISLAND_FRAMEWORK_DEPS: Record<string, string> = {
-  svelte: "@astrojs/svelte",
-  vue: "@astrojs/vue",
-};
+const ISLAND_FRAMEWORK_DEPS = new Map([
+  ["svelte", "@astrojs/svelte"],
+  ["vue", "@astrojs/vue"],
+]);
 
 /**
  * Adapter package the project must install itself for each deployment
- * platform whose adapter BeDocs doesn't ship. Node and Vercel ship with BeDocs,
+ * platform whose adapter Blume doesn't ship. Node and Vercel ship with Blume,
  * so they never need this.
  */
-const DEPLOYMENT_ADAPTER_DEPS: Record<string, string> = {
-  cloudflare: "@astrojs/cloudflare",
-  netlify: "@astrojs/netlify",
-};
+const DEPLOYMENT_ADAPTER_DEPS = new Map([
+  ["cloudflare", "@astrojs/cloudflare"],
+  ["netlify", "@astrojs/netlify"],
+]);
 
 /**
  * Warn when a Vue/Svelte island is present but its Astro integration isn't
  * installed — Vite would otherwise fail opaquely on the generated config import.
- * React ships with BeDocs, so it never needs this.
+ * React ships with Blume, so it never needs this.
  */
 const islandFrameworkWarnings = (
   frameworks: Set<string>,
@@ -572,7 +591,7 @@ const islandFrameworkWarnings = (
 ): string[] => {
   const warnings: string[] = [];
   for (const framework of frameworks) {
-    const dep = ISLAND_FRAMEWORK_DEPS[framework];
+    const dep = ISLAND_FRAMEWORK_DEPS.get(framework);
     if (dep && !canResolveFrom(root, dep)) {
       warnings.push(
         `Islands use ${framework}, which needs "${dep}". Install it (e.g. \`npm install ${dep} ${framework}\`).`
@@ -584,12 +603,12 @@ const islandFrameworkWarnings = (
 
 /**
  * Warn when the resolved server-output adapter is one the project must install
- * itself (Netlify/Cloudflare; Node and Vercel ship with BeDocs). The generated
+ * itself (Netlify/Cloudflare; Node and Vercel ship with Blume). The generated
  * astro.config.mjs imports the adapter package directly — and on those
  * platforms the adapter is even auto-selected from env vars — so warn early
  * rather than let the build die with an opaque ERR_MODULE_NOT_FOUND from the
  * hidden generated config. Availability mirrors the search-provider check: a
- * dep resolves from the project root or from the BeDocs package itself.
+ * dep resolves from the project root or from the Blume package itself.
  */
 const deploymentAdapterWarnings = (
   deployment: ResolvedConfig["deployment"],
@@ -597,7 +616,7 @@ const deploymentAdapterWarnings = (
 ): string[] => {
   const dep =
     deployment.output === "server" && deployment.adapter
-      ? DEPLOYMENT_ADAPTER_DEPS[deployment.adapter]
+      ? DEPLOYMENT_ADAPTER_DEPS.get(deployment.adapter)
       : undefined;
   if (
     dep &&
@@ -614,12 +633,12 @@ const deploymentAdapterWarnings = (
  * Warn when the configured search provider's SDK is missing. Provider SDKs are
  * optional peers; warn (rather than fail opaquely in Vite) when the package
  * isn't installed. A dep is available if the project installed it (resolves
- * from the root) OR BeDocs ships it (resolves from the BeDocs package — the same
- * set the `.bedocs` deps link exposes to the build). Resolving from the project
+ * from the root) OR Blume ships it (resolves from the Blume package — the same
+ * set the `.blume` deps link exposes to the build). Resolving from the project
  * root alone falsely flagged a shipped SDK like Orama (the default provider)
  * as missing whenever it wasn't hoisted into the project, e.g. under isolated
  * linkers. We resolve from each package's real location rather than through
- * the `.bedocs` junction, which can't be traversed reliably for store-symlinked
+ * the `.blume` junction, which can't be traversed reliably for store-symlinked
  * deps. `pkgDir` is injectable for testing.
  */
 export const searchProviderWarnings = (
@@ -636,6 +655,33 @@ export const searchProviderWarnings = (
     }
   }
   return warnings;
+};
+
+/**
+ * Warn when the Ask AI backend's provider SDK is missing. Like search provider
+ * SDKs, these are optional peers the project must install (only `gateway`
+ * needs nothing beyond the core `ai` package Blume ships) — warn early with
+ * the package name rather than let Vite fail to resolve the import opaquely.
+ * Same resolution rule as {@link searchProviderWarnings}: available if the
+ * project installed it or Blume can resolve it. `pkgDir` is injectable for
+ * testing.
+ */
+export const askProviderWarnings = (
+  ask: ResolvedConfig["ai"]["ask"],
+  root: string,
+  pkgDir: string = packageRoot()
+): string[] => {
+  // An external `endpoint` means no generated route, so no SDK is imported.
+  if (!ask?.enabled || ask.endpoint) {
+    return [];
+  }
+  const dep = askBackendRuntimeDep(ask);
+  if (!dep || canResolveFrom(root, dep) || canResolveFrom(pkgDir, dep)) {
+    return [];
+  }
+  return [
+    `Ask AI provider "${ask.provider}" needs "${dep}", which isn't installed. Run \`npm install ${dep}\` (or your package manager's equivalent).`,
+  ];
 };
 
 /** Absolute path to the configured `examples.css`, or null when unset. */
@@ -698,7 +744,7 @@ const readOptional = async (path: string | null): Promise<string> => {
 export const detectNeedsReact = async (root: string): Promise<boolean> => {
   const matches = await glob(["**/*.{tsx,jsx}"], {
     cwd: root,
-    ignore: ["**/node_modules/**", "**/.bedocs/**", "**/dist/**"],
+    ignore: ["**/node_modules/**", "**/.blume/**", "**/dist/**"],
     onlyFiles: true,
   });
   return matches.length > 0;
@@ -707,6 +753,9 @@ export const detectNeedsReact = async (root: string): Promise<boolean> => {
 /** Block math (`$$…$$`) or an explicitly authored `<Math …>` component. */
 const containsMath = (content: string): boolean =>
   content.includes("$$") || content.includes("<Math");
+
+/** Ceiling on concurrent content-file reads; unbounded fan-out risks EMFILE. */
+const READ_CONCURRENCY = 16;
 
 /**
  * Detect whether the project can render math: block math (`$$…$$`) or an
@@ -723,12 +772,12 @@ export const detectUsesMath = async (
 ): Promise<boolean> => {
   const files = await glob(["**/*.{md,mdx}"], {
     cwd: root,
-    ignore: ["**/node_modules/**", "**/.bedocs/**", "**/dist/**"],
+    ignore: ["**/node_modules/**", "**/.blume/**", "**/dist/**"],
     onlyFiles: true,
   });
-  const contents = await Promise.all(
-    files.map((file) => readOptional(join(root, file)))
-  );
+  const contents = await pMap(files, (file) => readOptional(join(root, file)), {
+    concurrency: READ_CONCURRENCY,
+  });
   return [...contents, ...staged].some(containsMath);
 };
 
@@ -773,7 +822,7 @@ const writeIfChanged = async (
  * search index, RSS feeds, reference pages, the MCP server — so toggling a
  * feature off would otherwise leave a stale file behind, and a leftover
  * server-rendered endpoint breaks the static build. `writeIfChanged` only ever
- * adds or updates, so this closes the loop. Scoped to `.bedocs/src`, so it never
+ * adds or updates, so this closes the loop. Scoped to `.blume/src`, so it never
  * touches Astro's `dist/`, `.astro/` cache, or the symlinked `node_modules`
  * (all of which live outside `src`). `written` holds normalized absolute paths.
  */
@@ -812,8 +861,8 @@ export const collectStaged = (project: BlumeProject): Map<string, string> => {
 };
 
 /**
- * Materialize staged source bodies under `.bedocs/content` and prune orphans in
- * that tree (separate from `.bedocs/src`), so a removed remote entry is cleaned up.
+ * Materialize staged source bodies under `.blume/content` and prune orphans in
+ * that tree (separate from `.blume/src`), so a removed remote entry is cleaned up.
  */
 const writeStagedContent = async (
   out: string,
@@ -838,33 +887,24 @@ interface LogoDimensions {
   width: number;
 }
 
-const SVG_ROOT = /<svg\b(?<attributes>[^>]*)>/u;
-const SVG_WIDTH = /\bwidth\s*=\s*["'](?<value>[^"']+)["']/u;
-const SVG_HEIGHT = /\bheight\s*=\s*["'](?<value>[^"']+)["']/u;
-const SVG_LENGTH = /^\s*(?<value>[\d.]+)(?:px)?\s*$/u;
-const SVG_VIEW_BOX =
-  /\bviewBox\s*=\s*["'][\d.-]+[\s,]+[\d.-]+[\s,]+(?<width>[\d.]+)[\s,]+(?<height>[\d.]+)["']/u;
-
-const parseSvgLength = (value: string | undefined): number | undefined => {
-  const length = Number(value?.match(SVG_LENGTH)?.groups?.value);
-  return length > 0 ? length : undefined;
-};
-
-/** Read dimensions from an SVG's explicit size or its view box. */
+/**
+ * Read dimensions from an SVG's explicit size or its view box. Measured with
+ * image-size — the same parser og/card.ts uses for the OG brand mark, so the
+ * header and the card can't disagree about one logo — which also tolerates
+ * the spellings the old regex missed (unquoted values, `em`/`pt` lengths, a
+ * `>` inside another attribute). An SVG with no usable size returns partial
+ * dimensions or throws; both collapse to undefined.
+ */
 const svgDimensions = (svg: string | undefined): LogoDimensions | undefined => {
-  const attributes = svg?.match(SVG_ROOT)?.groups?.attributes;
-  const width = parseSvgLength(attributes?.match(SVG_WIDTH)?.groups?.value);
-  const height = parseSvgLength(attributes?.match(SVG_HEIGHT)?.groups?.value);
-  if (width && height) {
-    return { height, width };
+  if (!svg) {
+    return;
   }
-
-  const viewBox = attributes?.match(SVG_VIEW_BOX);
-  const viewBoxWidth = Number(viewBox?.groups?.width);
-  const viewBoxHeight = Number(viewBox?.groups?.height);
-  return viewBoxWidth > 0 && viewBoxHeight > 0
-    ? { height: viewBoxHeight, width: viewBoxWidth }
-    : undefined;
+  try {
+    const { height, width } = imageSize(Buffer.from(svg));
+    return height && width ? { height, width } : undefined;
+  } catch {
+    return undefined;
+  }
 };
 
 /** Read a local SVG logo from the project root or public directory. */
@@ -883,6 +923,10 @@ const readLogoSvg = (
   return file ? readFileSync(file, "utf-8") : undefined;
 };
 
+/** Narrows a config union's string shorthand from its object form. */
+const isStringShorthand = <T>(value: T | string): value is string =>
+  typeof value === "string";
+
 /**
  * Resolve the configured logo. A single SVG is read and inlined so a
  * `currentColor` logo follows the theme; other images keep their URL for an
@@ -893,12 +937,12 @@ const resolveLogo = (project: BlumeProject): BlumeLogo | null => {
   if (!logo) {
     return null;
   }
-  const config = typeof logo === "string" ? { image: logo } : logo;
+  const config = isStringShorthand(logo) ? { image: logo } : logo;
   // `text` is passed through verbatim: `undefined` lets the brand fall back to
   // the site title, `""` renders the mark alone (a logo with the wordmark baked
   // in).
   const { href, image: source, text } = config;
-  const image = typeof source === "string" ? { light: source } : source;
+  const image = isStringShorthand(source) ? { light: source } : source;
   const light = image?.light ?? image?.dark;
   const dark = image?.dark ?? image?.light;
   const alt = image?.alt ?? "";
@@ -920,7 +964,7 @@ const resolveLogo = (project: BlumeProject): BlumeLogo | null => {
 };
 
 /**
- * Favicon filenames BeDocs auto-detects, in priority order. Mirrors the Next.js
+ * Favicon filenames Blume auto-detects, in priority order. Mirrors the Next.js
  * convention: an `icon.*` or `favicon.*` file in `public/` or the project root
  * becomes the site favicon, no config required.
  */
@@ -933,33 +977,51 @@ const FAVICON_CANDIDATES = [
   "icon.ico",
 ];
 
+/**
+ * Derive the `-dark` sibling of an icon filename (`icon.svg` → `icon-dark.svg`),
+ * inserting the suffix before the extension.
+ */
+const darkSibling = (name: string): string =>
+  name.replace(/\.(?=[^.]+$)/u, "-dark.");
+
 /** `<link type>` MIME for the favicon extensions we recognize. */
-const FAVICON_TYPES: Record<string, string> = {
-  ico: "image/x-icon",
-  jpeg: "image/jpeg",
-  jpg: "image/jpeg",
-  png: "image/png",
-  svg: "image/svg+xml",
-};
+const FAVICON_TYPES = new Map([
+  ["ico", "image/x-icon"],
+  ["jpeg", "image/jpeg"],
+  ["jpg", "image/jpeg"],
+  ["png", "image/png"],
+  ["svg", "image/svg+xml"],
+]);
 
 /** Infer the `<link type>` MIME from a filename, when we recognize the extension. */
 const faviconType = (name: string): string | undefined => {
   const ext = name.split(".").pop()?.toLowerCase();
-  return ext ? FAVICON_TYPES[ext] : undefined;
+  return ext ? FAVICON_TYPES.get(ext) : undefined;
 };
 
 /** Read a file and encode it as a `data:` URI of the given MIME type. */
 const inlineDataUri = (file: string, type: string): string =>
   `data:${type};base64,${readFileSync(file).toString("base64")}`;
 
-/** The bundled BeDocs favicon, inlined as a data URI so it needs no public file. */
+/**
+ * The bundled Blume favicon, inlined as a data URI so it needs no public file.
+ * The mark is dark, so it ships with a light-on-transparent dark-scheme variant —
+ * otherwise it disappears against dark browser chrome.
+ */
 const defaultFavicon = (): BlumeFavicon => ({
+  dark: {
+    href: inlineDataUri(
+      join(BLUME_SRC, "assets", "icon-dark.png"),
+      "image/png"
+    ),
+    type: "image/png",
+  },
   href: inlineDataUri(join(BLUME_SRC, "assets", "icon.png"), "image/png"),
   type: "image/png",
 });
 
 /**
- * Apple touch icon filenames BeDocs auto-detects, in priority order. Mirrors the
+ * Apple touch icon filenames Blume auto-detects, in priority order. Mirrors the
  * Next.js `apple-icon.*` convention (plus the `apple-touch-icon.png` most favicon
  * generators emit): a match in `public/` or the project root becomes the iOS
  * home-screen icon, no config required.
@@ -997,17 +1059,53 @@ const resolveIconFile = (
 };
 
 /**
- * Resolve the site favicon by convention, falling back to the bundled BeDocs mark
- * when the project ships no `icon.*`/`favicon.*` file.
+ * Resolve the site favicon by convention, falling back to the bundled Blume mark
+ * when the project ships no `icon.*`/`favicon.*` file. The dark-scheme variant
+ * is anchored to the resolved icon: its `-dark` sibling (e.g. `icon.svg` →
+ * `icon-dark.svg`) in the same directory — never an unrelated `-dark` file, so a
+ * stale or foreign `favicon-dark.*` can't silently pair with a different mark.
+ * A `-dark` file with no light sibling is the site's only mark and is used for
+ * both schemes, mirroring how `resolveLogo` treats a single-variant image.
  */
-const resolveFavicon = (project: BlumeProject): BlumeFavicon =>
-  resolveIconFile(project, FAVICON_CANDIDATES) ?? defaultFavicon();
+const resolveFavicon = (project: BlumeProject): BlumeFavicon => {
+  const { root } = project.context;
+  for (const name of FAVICON_CANDIDATES) {
+    if (existsSync(join(root, "public", name))) {
+      const type = faviconType(name);
+      const sibling = darkSibling(name);
+      return existsSync(join(root, "public", sibling))
+        ? { dark: { href: `/${sibling}`, type }, href: `/${name}`, type }
+        : { href: `/${name}`, type };
+    }
+  }
+  for (const name of FAVICON_CANDIDATES) {
+    const file = join(root, name);
+    if (existsSync(file)) {
+      const type = faviconType(name);
+      const mime = type ?? "image/x-icon";
+      const siblingFile = join(root, darkSibling(name));
+      return existsSync(siblingFile)
+        ? {
+            dark: { href: inlineDataUri(siblingFile, mime), type },
+            href: inlineDataUri(file, mime),
+            type,
+          }
+        : { href: inlineDataUri(file, mime), type };
+    }
+  }
+  return (
+    resolveIconFile(project, FAVICON_CANDIDATES.map(darkSibling)) ??
+    defaultFavicon()
+  );
+};
 
 /**
  * Resolve the Apple touch icon by convention, or null when the project ships
  * none (unlike the favicon, there's no bundled default). Note: iOS ignores
  * `data:`-URI apple-touch-icons, so a `public/` file (served by URL) is the
  * reliable path; a root-level file is still inlined for symmetry with favicons.
+ * Deliberately no `-dark` sibling detection here: iOS ignores `media` on
+ * `apple-touch-icon` links, so a dark variant could never be served.
  */
 const resolveAppleIcon = (project: BlumeProject): BlumeFavicon | null =>
   resolveIconFile(project, APPLE_ICON_CANDIDATES);
@@ -1018,7 +1116,7 @@ const resolveBanner = (config: ResolvedConfig): BlumeBanner | null => {
   if (!banner) {
     return null;
   }
-  if (typeof banner === "string") {
+  if (isStringShorthand(banner)) {
     return { content: banner, dismissible: false, key: banner };
   }
   return {
@@ -1108,9 +1206,8 @@ export const buildRuntimeData = (project: BlumeProject): string => {
     repoUrl: config.navigation.repo && repoUrl ? repoUrl : null,
   });
 
-  // Resolved UI dictionaries: one per locale under i18n, Russian baseline
-  // otherwise (BeDocs defaults to Russian). Threaded into chrome so the
-  // catch-all can pick the active locale.
+  // Resolved UI dictionaries: one per locale under i18n, English baseline
+  // otherwise. Threaded into chrome so the catch-all can pick the active locale.
   const uiByLocale = i18n
     ? Object.fromEntries(
         i18n.locales.map(({ code }) => [
@@ -1127,7 +1224,7 @@ export const buildRuntimeData = (project: BlumeProject): string => {
         defaultLocale: i18n.defaultLocale,
         overrides: i18n.ui,
       })
-    : resolveUIStrings("ru", { defaultLocale: "ru" });
+    : EN_UI;
 
   const navigationByLocale = i18n
     ? Object.fromEntries(
@@ -1161,6 +1258,10 @@ export const buildRuntimeData = (project: BlumeProject): string => {
       codeWrap: config.markdown.code.wrap,
       dateFormat: config.dateFormat,
       description: config.description,
+      discovery: {
+        agentReadability: config.seo.agentReadability,
+        llmsTxt: config.ai.llmsTxt.enabled,
+      },
       favicon: resolveFavicon(project),
       feedback: config.feedback,
       i18n: i18n
@@ -1197,6 +1298,7 @@ export const buildRuntimeData = (project: BlumeProject): string => {
         palette: config.seo.og.palette,
         site: resolveOgSite(config),
       },
+      openInChat: config.ai.openInChat,
       repoUrl,
       search: {
         enabled: config.search.provider !== "none",
@@ -1208,6 +1310,7 @@ export const buildRuntimeData = (project: BlumeProject): string => {
       theme: config.theme,
       title: config.title,
       toc: config.toc,
+      versions: config.versions ?? null,
       webmcp: {
         enabled: config.ai.webmcp,
         llms: config.ai.llmsTxt.enabled,
@@ -1220,10 +1323,23 @@ export const buildRuntimeData = (project: BlumeProject): string => {
     })),
     // CSS variables for Astro's <Font> component; matches the astro.config
     // `fonts:` entries derived from the same theme.fonts config.
-    fontCssVars: configuredCssVars(config.theme.fonts),
+    fontCssVars: configuredFonts(config.theme.fonts),
     navigation: withRepoUrl(graph.navigation),
     // Per-locale navigation; the catch-all selects the active locale's tree.
     navigationByLocale,
+    // Per-archived-version navigation; the catch-all selects by the route's
+    // version, then locale.
+    navigationByVersion: Object.fromEntries(
+      Object.entries(graph.navigationByVersion).map(([id, byLocale]) => [
+        id,
+        Object.fromEntries(
+          Object.entries(byLocale).map(([code, nav]) => [
+            code,
+            withRepoUrl(nav),
+          ])
+        ),
+      ])
+    ),
     routes: manifest.routes.map((route) => ({
       alternates: route.alternates,
       collection: route.collection,
@@ -1238,6 +1354,8 @@ export const buildRuntimeData = (project: BlumeProject): string => {
       locale: route.locale,
       path: route.path,
       title: route.title,
+      version: route.version,
+      versionAlternates: route.versionAlternates,
     })),
     // Default-locale chrome strings (English baseline when not under i18n).
     ui: defaultUi,
@@ -1249,7 +1367,7 @@ export const buildRuntimeData = (project: BlumeProject): string => {
 
 /** The resolved plan for the hosted MCP server within a single generate pass. */
 interface McpPlan {
-  /** Directory holding the injected discovery endpoints (`.bedocs/src/blume-mcp`). */
+  /** Directory holding the injected discovery endpoints (`.blume/src/blume-mcp`). */
   dir: string;
   /** `.well-known` discovery routes to inject as prerendered pages. */
   discoveryPages: { entrypoint: string; pattern: string }[];
@@ -1287,7 +1405,7 @@ const planMcp = (
     return {
       ...base,
       warnings: [
-        `MCP server route "${route}" is already used by a content or custom page; the MCP server was not generated. Set a different "ai.mcp.route" in bedocs.config.ts.`,
+        `MCP server route "${route}" is already used by a content or custom page; the MCP server was not generated. Set a different "ai.mcp.route" in blume.config.ts.`,
       ],
     };
   }
@@ -1345,6 +1463,76 @@ const writeMcpFiles = async (
 };
 
 /**
+ * Decide whether to generate the playground's built-in CORS proxy endpoint.
+ * Only the Blume renderer's playground with `proxy: true` needs it — a proxy
+ * URL string points at an external service, and `false` sends requests
+ * directly. Injected at `/_api-proxy` (rather than written under `pages/`)
+ * because Astro treats `_`-prefixed page files as private; the endpoint's own
+ * `prerender = false` export wins over the injection default.
+ */
+const planPlaygroundProxy = (config: ResolvedConfig, srcDir: string) => ({
+  enabled:
+    config.openapi.enabled &&
+    config.openapi.renderer === "blume" &&
+    config.openapi.playground.enabled &&
+    config.openapi.playground.proxy === true,
+  entrypoint: join(srcDir, "blume-openapi", "api-proxy.ts"),
+  pattern: "/_api-proxy",
+});
+
+/**
+ * The origins the built-in proxy is allowed to reach: one per absolute
+ * `servers[].url` across the parsed specs. This is the endpoint's whole trust
+ * boundary — the client sends the target as a query parameter, and a reader's
+ * custom base URL is not a documented server — so it is derived here, at build
+ * time, from the same documents the operation pages render.
+ *
+ * Relative (`/v1`) and templated (`{env}.api.example.com`) server URLs carry no
+ * origin to allow and are skipped; AsyncAPI documents declare `servers` as a
+ * map and contribute nothing (the proxy is OpenAPI-only).
+ */
+const specOrigins = (data: OpenApiData): string[] => {
+  const origins = new Set<string>();
+  for (const spec of Object.values(data)) {
+    // SAFETY: `document` is arbitrary parsed JSON; the assertion only names
+    // the optional `servers` shape, and every access below re-checks it —
+    // `Array.isArray(servers)` guards the list and `server.url ?? ""` the url.
+    const { servers } = spec.document as { servers?: { url?: string }[] };
+    for (const server of Array.isArray(servers) ? servers : []) {
+      const url = server.url ?? "";
+      // `new URL("https://{region}.api.example.com")` parses — the braces land
+      // in the hostname — so templated URLs need an explicit check or their
+      // junk literal becomes an allowlist entry no real request can match.
+      if (url.includes("{")) {
+        continue;
+      }
+      try {
+        origins.add(new URL(url).origin);
+      } catch {
+        // Not an absolute URL: nothing to allow.
+      }
+    }
+  }
+  return [...origins].toSorted();
+};
+
+/**
+ * The build-time diagnostic for a proxy whose allowlist came out empty. The
+ * allowlist comes solely from absolute `servers[].url` entries — relative and
+ * templated ones carry no origin — and with none at all the endpoint would
+ * 403 every playground send with nothing pointing the author at the spec.
+ */
+const proxyAllowlistWarnings = (
+  enabled: boolean,
+  origins: string[]
+): string[] =>
+  enabled && origins.length === 0
+    ? [
+        "openapi.playground.proxy is enabled, but no spec declares an absolute servers[].url (relative and templated URLs carry no origin), so the proxy's allowlist is empty and it will refuse every request. Add an absolute server URL to the spec, or point playground.proxy at an external proxy URL.",
+      ]
+    : [];
+
+/**
  * Write the Ask AI endpoint and, unless the backend runs its own retrieval
  * (Inkeep), the grounding snapshot the endpoint queries at request time. A no-op
  * when Ask AI is disabled.
@@ -1367,7 +1555,10 @@ const writeAskFiles = async (
   }
   await write(
     join(srcDir, "pages", "api", "ask.ts"),
-    askEndpointTemplate(resolveAskBackend(ask), grounded)
+    askEndpointTemplate(resolveAskBackend(ask), grounded, {
+      instructions: ask.instructions,
+      retrieval: ask.retrieval,
+    })
   );
 };
 
@@ -1481,7 +1672,7 @@ const assertFontFilesExist = (project: BlumeProject): void => {
 };
 
 /**
- * Write (or update) the generated `.bedocs/` Astro runtime for a project.
+ * Write (or update) the generated `.blume/` Astro runtime for a project.
  * Only files whose content changed are rewritten so Vite HMR stays fast.
  */
 export const generateRuntime = async (
@@ -1512,7 +1703,7 @@ export const generateRuntime = async (
   const askEnabled = config.ai.ask?.enabled ?? false;
   const exportPdf = config.export.pdf;
   const exportEpub = config.export.epub;
-  // Staged (non-filesystem) sources materialize into `.bedocs/content`; keyed by
+  // Staged (non-filesystem) sources materialize into `.blume/content`; keyed by
   // entryId so i18n duplicates of one entry write a single file. Collected here
   // so math detection also sees staged bodies (they never live under root).
   const staged = collectStaged(project);
@@ -1564,7 +1755,7 @@ export const generateRuntime = async (
   const needsSvelte = frameworks.has("svelte");
 
   // Absolute path to the React Compiler babel plugin (null when off). Resolved
-  // here, Node-side, so the generated config points babel straight at BeDocs's
+  // here, Node-side, so the generated config points babel straight at Blume's
   // shipped copy — see resolveReactCompiler. Any unresolved-but-requested
   // warning is folded into `warnings` below (declared later).
   const reactCompilerPath = resolveReactCompiler(config, needsReact);
@@ -1574,11 +1765,35 @@ export const generateRuntime = async (
   // private and filtered out anyway, but the intent is the user's pages.
   const ogRoutes = customOgRoutes(pages, config.title, config.seo.og.titles);
 
+  // Whether the generated `/changelog` index exists — shared by the OG endpoint
+  // (which adds the index's own card) and the page write below. Computed here,
+  // before the MCP discovery pages are appended, on the user's own pages.
+  const changelogIndex = hasGeneratedChangelog(project, pages);
+
   // The hosted MCP server. The `.well-known` discovery docs are injected as
   // prerendered routes alongside user pages; the server endpoint itself is a
   // normal (server-rendered) page written by `writeMcpFiles`.
   const mcp = planMcp(project, srcDir, pages);
   pages.push(...mcp.discoveryPages);
+
+  // The parsed OpenAPI specs behind the `blume:openapi` alias, also the source
+  // of the proxy's origin allowlist below. The source parsed them during the
+  // scan, so reading them here is free.
+  const openApiSource = project.sources.find(isOpenApiSource);
+  const openApiData = openApiSource ? openApiSource.openApiData() : {};
+
+  // The playground's built-in CORS proxy rides the same injection path as the
+  // MCP discovery docs; the endpoint itself opts out of prerendering.
+  const playgroundProxy = planPlaygroundProxy(config, srcDir);
+  if (playgroundProxy.enabled) {
+    pages.push({
+      entrypoint: playgroundProxy.entrypoint,
+      pattern: playgroundProxy.pattern,
+    });
+  }
+  // Computed once: the endpoint template bakes it in below, and an empty list
+  // is worth a diagnostic — the proxy would refuse every request it gets.
+  const proxyOrigins = specOrigins(openApiData);
 
   const hasStaged = staged.size > 0;
   // Only emit a project-scanning `docs` collection when a filesystem source
@@ -1725,17 +1940,20 @@ export const generateRuntime = async (
     ),
     writeAskFiles(project, srcDir, write),
     writeMcpFiles(project, mcp, write),
+    playgroundProxy.enabled
+      ? write(playgroundProxy.entrypoint, playgroundProxyTemplate(proxyOrigins))
+      : Promise.resolve(false),
   ]);
 
   if (config.seo.og.enabled) {
     await write(
       join(srcDir, "pages", "og", "[...slug].png.ts"),
-      ogEndpointTemplate(ogRoutes, projectOgFonts(project))
+      ogEndpointTemplate(ogRoutes, projectOgFonts(project), changelogIndex)
     );
   }
 
   // Changelog index (`/changelog`), rendered through the Update timeline layout.
-  if (hasGeneratedChangelog(project, pages)) {
+  if (changelogIndex) {
     await write(
       join(srcDir, "pages", "changelog.astro"),
       changelogIndexTemplate({
@@ -1789,7 +2007,7 @@ export const generateRuntime = async (
   const rawMarkdown = await buildRawMarkdown(project);
   // The originals behind the rewritten `/blume-assets/content/…` references in
   // the agent-facing Markdown, plus the endpoint that serves them (and the
-  // remote-source assets materialized under `.bedocs/public/blume-assets`).
+  // remote-source assets materialized under `.blume/public/blume-assets`).
   const contentAssets = await collectContentAssets(project);
   await Promise.all([
     write(
@@ -1835,10 +2053,12 @@ export const generateRuntime = async (
     ]);
   }
 
-  // API/AsyncAPI reference pages (Scalar). One self-contained page per source,
-  // mounted on its configured route and regenerated each run.
+  // Scalar-rendered API/AsyncAPI reference pages (`renderer: "scalar"`). One
+  // self-contained page per source, mounted on its configured route and
+  // regenerated each run.
   const warnings: string[] = [
     ...(depsLinkWarning ? [depsLinkWarning] : []),
+    ...proxyAllowlistWarnings(playgroundProxy.enabled, proxyOrigins),
     ...reactCompilerWarnings(config, needsReact, reactCompilerPath),
     ...mcp.warnings,
     ...islandDiscovery.warnings,
@@ -1855,7 +2075,7 @@ export const generateRuntime = async (
     ...pages.map((page) => page.pattern),
     ...referenceRoutes(config),
   ]);
-  if (hasGeneratedChangelog(project, pages)) {
+  if (changelogIndex) {
     navTargetRoutes.add("/changelog");
   }
   // Curated `search.popular` icons live outside the navigation model, so they
@@ -1875,10 +2095,11 @@ export const generateRuntime = async (
     ...islandDiscovery.islands.map((island) => island.name),
     ...overrideTags,
   ]);
-  // Missing-dependency preflights: the search provider's SDK, the deployment
-  // adapter's package, and — since React ships with BeDocs while Vue/Svelte
-  // don't — any island framework's Astro integration. Warn early rather than
-  // let Vite fail to resolve them opaquely.
+  // Missing-dependency preflights: the search provider's SDK, the Ask AI
+  // backend's provider SDK, the deployment adapter's package, and — since
+  // React ships with Blume while Vue/Svelte don't — any island framework's
+  // Astro integration. Warn early rather than let Vite fail to resolve them
+  // opaquely.
   warnings.push(
     ...validateUsedComponents(
       project.graph.pages,
@@ -1886,6 +2107,7 @@ export const generateRuntime = async (
       new Set(registry.map((item) => item.name))
     ).map(diagnosticWarning),
     ...searchProviderWarnings(config.search.provider, context.root),
+    ...askProviderWarnings(config.ai.ask, context.root),
     ...deploymentAdapterWarnings(config.deployment, context.root),
     ...islandFrameworkWarnings(frameworks, context.root)
   );
@@ -1903,20 +2125,16 @@ export const generateRuntime = async (
     );
   }
 
-  // The parsed OpenAPI specs behind the `blume:openapi` alias. Always written
-  // (even as `{}`) so the alias resolves whether or not a reference is enabled;
-  // the source parsed the specs during the scan, so this is just serialization.
-  const openApiSource = project.sources.find(isOpenApiSource);
+  // `openapi.json` (the `blume:openapi` alias) is always written — even as `{}`
+  // — so the alias resolves whether or not a reference is enabled; the specs
+  // were parsed during the scan, so this is just serialization.
   // These write to distinct trees and never read one another, so they batch.
   // `data.json`/`openapi.json` and the manifest are not "structural" for Astro;
-  // they hot-reload. `writeStagedContent` owns the `.bedocs/content` tree (its
-  // own pruning), outside `.bedocs/src`, so a removed remote entry doesn't linger.
+  // they hot-reload. `writeStagedContent` owns the `.blume/content` tree (its
+  // own pruning), outside `.blume/src`, so a removed remote entry doesn't linger.
   await Promise.all([
     write(join(srcDir, "generated", "data.json"), buildRuntimeData(project)),
-    write(
-      openapiPath,
-      `${JSON.stringify(openApiSource ? openApiSource.openApiData() : {})}\n`
-    ),
+    write(openapiPath, `${JSON.stringify(openApiData)}\n`),
     write(
       join(out, "blume.manifest.json"),
       `${JSON.stringify(project.manifest, null, 2)}\n`
@@ -1924,7 +2142,7 @@ export const generateRuntime = async (
     writeStagedContent(out, staged),
   ]);
 
-  // Remove anything under `.bedocs/src` this pass didn't write — e.g. an Ask AI
+  // Remove anything under `.blume/src` this pass didn't write — e.g. an Ask AI
   // endpoint left behind after the feature was switched off.
   await pruneOrphans(srcDir, written);
 

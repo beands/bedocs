@@ -1,5 +1,6 @@
 ---
 import Icon from "../Icon.astro";
+import { componentSlug } from "../slug.ts";
 
 interface Props {
   title: string;
@@ -10,15 +11,7 @@ interface Props {
 }
 
 const { defaultOpen = false, description, icon, id, title } = Astro.props;
-const slugify = (value: string): string =>
-  value
-    .toLowerCase()
-    .trim()
-    .replaceAll(/[^\w\s-]/gu, "")
-    .replaceAll(/[\s_]+/gu, "-")
-    .replaceAll(/-+/gu, "-")
-    .replaceAll(/^-|-$/gu, "");
-const accordionId = id ?? slugify(title);
+const accordionId = id ?? componentSlug(title);
 ---
 
 <details
@@ -128,6 +121,10 @@ const accordionId = id ?? slugify(title);
     };
 
     window.addEventListener("hashchange", openHashAccordion);
+    // Client-router swaps replace the body with fresh server-rendered
+    // accordions (duplicate ids and all), so the dedupe + hash-open pass has
+    // to run again for each new page.
+    document.addEventListener("astro:after-swap", init);
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", init, { once: true });
     } else {

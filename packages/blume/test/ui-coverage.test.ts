@@ -18,6 +18,7 @@ import {
   excerptFor,
   highlight,
   matchSnippet,
+  sanitizeExcerpt,
 } from "../src/components/layout/search/types.ts";
 import type { BlumeProject } from "../src/core/project-graph.ts";
 import { blumeConfigSchema, pageMetaSchema } from "../src/core/schema.ts";
@@ -86,10 +87,12 @@ describe("fetchRepositoryInfo", () => {
 
   it("sends a bearer token and dedupes repeated lookups via the cache", async () => {
     let calls = 0;
-    const seen: { authorization?: string | null } = {};
-    globalThis.fetch = ((_input: unknown, init: { headers: Headers }) => {
+    let seenAuthorization: string | null | undefined;
+    // SAFETY: the stub implements the one call fetchRepositoryInfo makes;
+    // fetch's extra properties (preconnect) are never touched.
+    globalThis.fetch = ((_input, init) => {
       calls += 1;
-      seen.authorization = init.headers.get("Authorization");
+      seenAuthorization = new Headers(init?.headers).get("Authorization");
       return Promise.resolve(
         Response.json({
           description: null,
@@ -97,7 +100,7 @@ describe("fetchRepositoryInfo", () => {
           stargazers_count: 9,
         })
       );
-    }) as unknown as typeof fetch;
+    }) as typeof fetch;
 
     const options = {
       baseUrl: "https://gh.test",
@@ -108,7 +111,7 @@ describe("fetchRepositoryInfo", () => {
     const first = await fetchRepositoryInfo(options);
     const second = await fetchRepositoryInfo(options);
 
-    expect(seen.authorization).toBe("Bearer secret");
+    expect(seenAuthorization).toBe("Bearer secret");
     expect(first).toEqual({ description: null, forks: 3, stars: 9 });
     // The second lookup resolves the cached promise to the same object.
     expect(second).toBe(first);
@@ -129,6 +132,7 @@ describe("flattenPages", () => {
           route: "/group/old",
         },
       ],
+      display: "flat",
       kind: "group",
       label: "Group",
       route: "/group",
@@ -153,6 +157,7 @@ describe("findBreadcrumbs", () => {
       children: [
         { kind: "page", label: "Intro", pageId: "i", route: "/group/intro" },
       ],
+      display: "flat",
       kind: "group",
       label: "Group",
       route: "/group",
@@ -206,10 +211,10 @@ describe("server-proxied search endpoint", () => {
   });
 
   it("returns an empty result when the endpoint responds non-ok", async () => {
-    globalThis.fetch = (() =>
-      Promise.resolve(
-        new Response("boom", { status: 500 })
-      )) as unknown as typeof fetch;
+    // SAFETY: the stub covers the single search request; fetch's extra
+    // properties (preconnect) are never touched.
+    globalThis.fetch = ((_input) =>
+      Promise.resolve(new Response("boom", { status: 500 }))) as typeof fetch;
     const result = await createSearch({ api: "/api/search" })("q");
     expect(result).toStrictEqual({ hits: [], sections: [] });
   });
@@ -220,8 +225,10 @@ describe("server-proxied search endpoint", () => {
       title: `T${index}`,
       url: `/p${index}`,
     }));
-    globalThis.fetch = (() =>
-      Promise.resolve(Response.json(hits))) as unknown as typeof fetch;
+    // SAFETY: the stub covers the single search request; fetch's extra
+    // properties (preconnect) are never touched.
+    globalThis.fetch = ((_input) =>
+      Promise.resolve(Response.json(hits))) as typeof fetch;
     const result = await createSearch({ api: "/api/search" })("q");
     expect(result.hits).toHaveLength(12);
     expect(result.sections).toStrictEqual([]);
@@ -230,7 +237,9 @@ describe("server-proxied search endpoint", () => {
   it("escapes server-derived hit text and marks the query matches", async () => {
     // The dialog injects title/excerpt as HTML, so markup returned by the
     // service must render literally rather than execute.
-    globalThis.fetch = (() =>
+    // SAFETY: the stub covers the single search request; fetch's extra
+    // properties (preconnect) are never touched.
+    globalThis.fetch = ((_input) =>
       Promise.resolve(
         Response.json([
           {
@@ -239,7 +248,7 @@ describe("server-proxied search endpoint", () => {
             url: "/x",
           },
         ])
-      )) as unknown as typeof fetch;
+      )) as typeof fetch;
     const result = await createSearch({ api: "/api/search" })("needle");
     expect(result.hits[0]?.title).toBe(
       "&lt;b&gt;<mark>needle</mark>&lt;/b&gt;"
@@ -317,6 +326,51 @@ describe("search text helpers", () => {
   it("returns an empty excerpt for empty content", () => {
     expect(excerptFor("", "")).toBe("");
   });
+
+  it("keeps bare <mark> highlighting in a remote excerpt", () => {
+    expect(sanitizeExcerpt("a <mark>hit</mark> here")).toBe(
+      "a <mark>hit</mark> here"
+    );
+    // Pagefind may emit uppercase-free tags only, but the guard is
+    // case-insensitive either way.
+    expect(sanitizeExcerpt("<MARK>hit</MARK>")).toBe("<MARK>hit</MARK>");
+  });
+
+  it("strips every non-mark tag from a remote excerpt", () => {
+    expect(sanitizeExcerpt('x <img src=1 onerror="a()"> y')).toBe("x  y");
+    expect(sanitizeExcerpt("<script>alert(1)</script>")).toBe("alert(1)");
+    // Attributes make even a mark untrusted.
+    expect(sanitizeExcerpt('<mark onmouseover="a()">hi</mark>')).toBe(
+      "hi</mark>"
+    );
+  });
+
+  it("drops an unterminated trailing tag", () => {
+    expect(sanitizeExcerpt("clipped <img src=")).toBe("clipped ");
+  });
+
+  it("escapes stray brackets so only mark tags parse as markup", () => {
+    // `&lt;` renders identically to `<` via innerHTML but can't open a tag.
+    expect(sanitizeExcerpt("1 < 2 &amp; 3 > 2")).toBe("1 &lt; 2 &amp; 3 > 2");
+  });
+
+  it("defuses comment openers that would swallow the excerpt", () => {
+    // `<!--` is not tag-shaped, so the tag strip alone would pass it through
+    // to innerHTML, where it comments out everything after it.
+    expect(sanitizeExcerpt("a <!-- b <mark>hit</mark>")).toBe(
+      "a &lt;!-- b <mark>hit</mark>"
+    );
+    expect(sanitizeExcerpt("<?bogus comment>")).toBe("&lt;?bogus comment>");
+  });
+
+  it("cannot be spliced into a fresh tag by a dropped one", () => {
+    // Deleting `<b>` in place would leave `<script>` behind; scanning every
+    // `<` instead leaves the leftovers as inert text.
+    expect(sanitizeExcerpt("<<b>script>alert(1)</b>")).toBe(
+      "&lt;script>alert(1)"
+    );
+    expect(sanitizeExcerpt("<scr<b>ipt>alert(1)")).toBe("ipt>alert(1)");
+  });
 });
 
 describe("buildResult", () => {
@@ -360,6 +414,8 @@ describe("buildResult", () => {
   });
 });
 
+// SAFETY: only the fields the RSS builder reads; the rest of PageRecord is
+// immaterial to these feeds.
 const blogPage = (over: Partial<PageRecord>): PageRecord =>
   ({
     contentType: "blog",
@@ -370,6 +426,8 @@ const blogPage = (over: Partial<PageRecord>): PageRecord =>
     ...over,
   }) as PageRecord;
 
+// SAFETY: buildRssFeeds reads only the config and the graph's pages; the
+// rest of BlumeProject is immaterial to these feeds.
 const rssProject = (pages: PageRecord[]): BlumeProject =>
   ({
     config: blumeConfigSchema.parse({
@@ -378,7 +436,7 @@ const rssProject = (pages: PageRecord[]): BlumeProject =>
       title: "T",
     }),
     graph: { pages },
-  }) as unknown as BlumeProject;
+  }) as BlumeProject;
 
 describe("buildRssFeeds — pages without a date", () => {
   it("includes a publishable page that declares no date", () => {
@@ -389,6 +447,7 @@ describe("buildRssFeeds — pages without a date", () => {
 
   it("renders an item with no pubDate when the page has no date", () => {
     const [feed] = buildRssFeeds(rssProject([blogPage({})]));
+    // SAFETY: the single blog page above always yields exactly one feed.
     const xml = renderRssFeed(feed as RssFeed);
     expect(xml).toContain("<title>A</title>");
     expect(xml).not.toContain("<pubDate>");
@@ -400,6 +459,27 @@ const componentSource = (path: string): Promise<string> =>
 
 const layoutSource = (name: string): Promise<string> =>
   componentSource(`layout/${name}`);
+
+/**
+ * Every `.astro` file under `src/` that imports the named component. The
+ * single-importer tests below use it to pin which pages can ever carry a
+ * lazy panel's loader script.
+ */
+const astroImportersOf = async (component: string): Promise<string[]> => {
+  const srcRoot = new URL("../src/", import.meta.url).pathname;
+  const importPattern = new RegExp(
+    String.raw`from\s+"[^"]*${component}\.astro"`,
+    "u"
+  );
+  const importers: string[] = [];
+  for await (const file of new Bun.Glob("**/*.astro").scan(srcRoot)) {
+    const source = await readFile(join(srcRoot, file), "utf-8");
+    if (importPattern.test(source)) {
+      importers.push(file);
+    }
+  }
+  return importers;
+};
 
 describe("layout chrome sources", () => {
   it("toggles the search dialog on ⌘K and guards re-entrant opens", async () => {
@@ -444,6 +524,16 @@ describe("layout chrome sources", () => {
     expect(source).toContain(
       'class="shrink-0 text-muted-foreground rtl:-scale-x-100"'
     );
+  });
+
+  it("resolves the display mode per node, never from a global prop", async () => {
+    // The builder stamps each generated group with its resolved display
+    // (index frontmatter > folder meta > global); the renderer must read that
+    // node value for both the row branches and the drill-in panel collection,
+    // or per-group overrides silently regress to the sidebar-wide mode.
+    const source = await layoutSource("NavTree.astro");
+    expect(source).toContain('const display = item.display ?? "flat";');
+    expect(source).toContain('(node.display ?? "flat") === "page"');
   });
 
   it("uses the sidebar row radius for the full-width NavTree back button", async () => {
@@ -491,6 +581,14 @@ describe("layout chrome sources", () => {
   });
 });
 
+/** The JSON-LD node fields this test asserts on. */
+interface JsonLdArticle {
+  "@type"?: unknown;
+  dateModified?: unknown;
+  datePublished?: unknown;
+  inLanguage?: unknown;
+}
+
 describe("buildStructuredData — dateModified and locale", () => {
   it("emits dateModified and inLanguage for a deeper page", () => {
     const data = buildStructuredData({
@@ -503,10 +601,66 @@ describe("buildStructuredData — dateModified and locale", () => {
       siteUrl: "https://x.test",
       title: "Guide",
     });
-    const graph = (data?.["@graph"] ?? []) as Record<string, unknown>[];
+    // SAFETY: buildStructuredData always emits `@graph` as an array of
+    // schema.org node objects.
+    const graph = (data?.["@graph"] ?? []) as JsonLdArticle[];
     const article = graph.find((node) => node["@type"] === "TechArticle");
     expect(article?.dateModified).toBe("2026-02-01T00:00:00.000Z");
     expect(article?.inLanguage).toBe("fr");
     expect(article?.datePublished).toBeUndefined();
+  });
+});
+
+describe("openapi playground sources", () => {
+  it("loads the playground client lazily behind the details toggle", async () => {
+    // The client module must stay a dynamic import: it becomes its own chunk,
+    // downloaded only when a reader actually opens the Try It panel.
+    const source = await componentSource("openapi/Playground.astro");
+    expect(source).toContain('await import("./playground-client.ts")');
+    expect(source).toContain("initPlayground(this)");
+    expect(source).toContain("{ once: true }");
+  });
+
+  it("keeps Operation.astro the only importer of Playground.astro", async () => {
+    // The no-playground-JS-on-non-operation-pages guarantee: any other .astro
+    // importing the panel would pull its loader script onto that page too.
+    expect(await astroImportersOf("Playground")).toEqual([
+      "components/openapi/Operation.astro",
+    ]);
+  });
+
+  it("tags each request-sample pane with its language for live sync", async () => {
+    // The playground client re-renders samples by [data-sample-lang]; the
+    // attribute must ride the same element as the tab-switcher's data-panel,
+    // and only request samples opt in (response/message panels pass no lang).
+    expect(await componentSource("openapi/PanelTabs.astro")).toMatch(
+      /data-panel=\{panel\.key\}\s+data-sample-lang=\{panel\.lang\}/u
+    );
+    expect(await componentSource("openapi/RequestPanel.astro")).toContain(
+      "lang: language.id"
+    );
+  });
+});
+
+describe("asyncapi composer sources", () => {
+  it("loads the composer client lazily behind the details toggle", async () => {
+    // Same island discipline as the OpenAPI panel: its own chunk, downloaded
+    // only when a reader actually opens the composer.
+    const source = await componentSource("openapi/MessageComposer.astro");
+    expect(source).toContain('await import("./message-composer.ts")');
+    expect(source).toContain("initComposer(this)");
+    expect(source).toContain("{ once: true }");
+  });
+
+  it("keeps AsyncApiOperation.astro the only importer of MessageComposer.astro", async () => {
+    expect(await astroImportersOf("MessageComposer")).toEqual([
+      "components/openapi/AsyncApiOperation.astro",
+    ]);
+  });
+
+  it("tags each event-sample pane with its tool id for live sync", async () => {
+    expect(await componentSource("openapi/AsyncApiOperation.astro")).toContain(
+      "lang: language.id"
+    );
   });
 });

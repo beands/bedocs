@@ -3,6 +3,7 @@ import type { ColorFunction } from "consola/utils";
 
 import { AGENTS } from "../audit/agent.ts";
 import type { AgentKind } from "../audit/agent.ts";
+import { duration, money, seconds } from "../cli/report-format.ts";
 import { countBySeverity } from "../core/diagnostics.ts";
 import type { Diagnostic } from "../core/types.ts";
 import type {
@@ -28,17 +29,17 @@ import type {
 
 const ESC = String.fromCodePoint(27);
 
-const GLYPH: Record<TranslateItemStatus, string> = {
+const GLYPH = {
   failed: "✖",
   partial: "!",
   translated: "✔",
-};
+} satisfies Record<TranslateItemStatus, string>;
 
-const STATUS_COLOR: Record<TranslateItemStatus, ColorFunction> = {
+const STATUS_COLOR = {
   failed: colors.red,
   partial: colors.yellow,
   translated: colors.green,
-};
+} satisfies Record<TranslateItemStatus, ColorFunction>;
 
 export const SPINNER_FRAMES = [
   "⠋",
@@ -59,20 +60,6 @@ export const SPINNER_INTERVAL_MS = 80;
 /** The clear-to-start-of-line prefix every TTY rewrite uses. */
 const REWRITE = `\r${ESC}[K`;
 
-const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)}s`;
-
-const money = (cost: number | undefined): string =>
-  cost === undefined ? "" : `$${cost.toFixed(2)}`;
-
-const duration = (ms: number): string => {
-  if (ms < 60_000) {
-    return seconds(ms);
-  }
-  const minutes = Math.floor(ms / 60_000);
-  const rest = Math.round((ms % 60_000) / 1000);
-  return `${minutes}m ${rest}s`;
-};
-
 /** `docs/guides/install.mdx → fr`, or the batched meta call's label. */
 export const itemLabel = (item: WorkItem): string =>
   item.kind === "page"
@@ -89,8 +76,12 @@ export const spinnerLine = (
   total: number,
   frame: number
 ): string => {
+  // SAFETY: the renderer only paints while at least one item is active, so the
+  // oldest active entry exists.
   const first = active[0] as WorkItem;
   const more = active.length > 1 ? ` (+${active.length - 1} more)` : "";
+  // SAFETY: `frame % SPINNER_FRAMES.length` is always an index into the
+  // non-empty frames array.
   return `  ${colors.cyan(SPINNER_FRAMES[frame % SPINNER_FRAMES.length] as string)} ${itemLabel(first)}${more} ${colors.dim(`${done}/${total}`)}`;
 };
 
@@ -229,7 +220,7 @@ export const checkReportJson = (workList: TranslateWorkList): string => {
 };
 
 /** One run result lowered to JSON-friendly, root-relative fields. */
-const resultJson = (result: TranslateItemResult): Record<string, unknown> => ({
+const resultJson = (result: TranslateItemResult) => ({
   costUsd: result.costUsd,
   detail: result.detail,
   durationMs: result.durationMs,

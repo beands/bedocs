@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "pathe";
 
 /**
- * `blume translate` end-to-end as a subprocess, with a fake `claude`
+ * `bedocs translate` end-to-end as a subprocess, with a fake `claude`
  * executable on PATH so no real agent (or network) is involved.
  */
 
@@ -44,12 +44,12 @@ const INSTALL_EN =
 const INSTALL_FR =
   "---\ntitle: Installation\n---\n# Installation\n\nLancez l'installateur.\n";
 
-const PROJECT_FILES: Record<string, string> = {
+const PROJECT_FILES = {
   "blume.config.ts": CONFIG,
   "docs/fr/index.mdx": "---\ntitle: Accueil\n---\n# Accueil\n",
   "docs/guides/install.mdx": INSTALL_EN,
   "docs/index.mdx": "---\ntitle: Home\n---\n# Home\n",
-};
+} satisfies Record<string, string>;
 
 const fixture = async (
   files: Record<string, string> = PROJECT_FILES

@@ -102,6 +102,14 @@ Die Aktion **Im Chat öffnen** öffnet die aktuelle Seite in einem KI-Assistente
 
 Wie "Als Markdown kopieren" erfordert dies keine Einrichtung. Der Assistent ruft die Seite über ihre öffentliche URL ab, es funktioniert also, sobald die Seite bereitgestellt ist.
 
+Um die Aktion anzupassen, setze `ai.openInChat`. `false` blendet sie vollständig aus, und ein Array von Anbieter-Schlüsseln — `"v0"`, `"chatgpt"`, `"claude"`, `"t3"`, `"scira"`, `"cursor"` — zeigt genau diese Anbieter, in der Reihenfolge, in der du sie aufführst:
+
+```ts blume.config.ts lineNumbers
+ai: {
+  openInChat: ["claude", "chatgpt", "cursor"],
+}
+```
+
 Um einen kopierfertigen Prompt direkt in deine Inhalte einzubetten — statt einer seitenweiten Aktion —, verwende die [Prompt-Komponente](/docs/content/components#prompt), die eine beschriftete Zeile mit einer Schaltfläche **Prompt kopieren** und einem optionalen Link zum Öffnen in Cursor rendert.
 
 ## Ask AI
@@ -137,6 +145,22 @@ ai: {
 
 `label` ist die Frage, die gestellt wird; `icon` ist optional. Lässt du `suggestions` ungesetzt (oder leer), öffnet sich das Panel mit einem schlichten Eingabefeld.
 
+### Eigene Anweisungen
+
+Ergänze mit `instructions` deinen eigenen System-Prompt-Text — Identität, Sprache, Tonfall oder alles andere, was der Assistent im Hinterkopf behalten soll:
+
+```ts blume.config.ts lineNumbers
+ai: {
+  ask: {
+    enabled: true,
+    instructions:
+      "You are Bloomy, the Acme docs assistant. Answer in the language the question was asked in, and keep answers under three paragraphs.",
+  },
+}
+```
+
+Dein Text wird den eingebauten Anweisungen **hinzugefügt**, statt sie zu ersetzen: Der eingebaute Teil trägt den [Fundierungs](#grounding)-Vertrag — nur aus den abgerufenen Seiten antworten, sie als Markdown-Links zitieren —, von dem die Zitate im Chat-Panel abhängen, er bleibt also unangetastet, was auch immer du ergänzt.
+
 ### Fundierung
 
 Ask AI ist **in deiner Dokumentation fundiert**. Für jede Frage ruft es die relevantesten Seiten ab — über denselben lexikalischen [Orama](/docs/configuration/search)-Index, der auch die Suche auf der Seite antreibt — und fügt sie in den System-Prompt des Modells ein, sodass Antworten aus deinen Inhalten stammen statt aus dem Eigenwissen des Modells. Dem Assistenten wird aufgetragen, nur aus den abgerufenen Seiten zu antworten, zu sagen, wenn etwas nicht abgedeckt ist, und die Seiten zu zitieren, aus denen er geschöpft hat.
@@ -144,6 +168,33 @@ Ask AI ist **in deiner Dokumentation fundiert**. Für jede Frage ruft es die rel
 Die Seite, auf der sich der Leser gerade befindet, wird dem Kontext zuerst hinzugefügt und dient dazu, den Abruf auf die Sprache dieser Seite einzugrenzen, sodass Antworten dort relevant bleiben, wo der Leser sich in der Dokumentation befindet. Der Abruf läuft zur Anfragezeit aus einem in den Build eingebackenen Snapshot, funktioniert also unabhängig von deinem [Such](/docs/configuration/search)-Anbieter — selbst wenn die Suche auf `none` gesetzt ist — und benötigt keine Konfiguration.
 
 Die Fundierung ist für jedes Backend aktiv außer **[Inkeep](#backends)**, das seinen eigenen Abruf über die in seinem Dashboard indizierten Inhalte durchführt.
+
+### Abrufumfang
+
+Wie viel Dokumentation eine Frage mit sich trägt, ist der größte Hebel dafür, wie lange der Leser auf das erste Wort wartet: Das Modell liest jedes eingefügte Zeichen, bevor es ein Token ausgibt. Bei einem gehosteten Spitzenmodell ist das unsichtbar, bei einem selbst gehosteten Backend dominiert es. `retrieval` bemisst ihn:
+
+```ts blume.config.ts lineNumbers
+ai: {
+  ask: {
+    enabled: true,
+    retrieval: {
+      maxResults: 3, // fewer pages retrieved per question
+      excerptChars: 1200, // shorter excerpt from each one
+      contextBudget: 3000, // smaller total injection
+    },
+  },
+}
+```
+
+| Option | Standard | Beschreibung |
+| --- | --- | --- |
+| `maxResults` | `6` | Pro Frage abgerufene Dokumente. |
+| `excerptChars` | `2000` | Zeichen, die von jeder abgerufenen Seite behalten werden. |
+| `contextBudget` | `10000` | Insgesamt eingefügte Zeichen, über alle Auszüge hinweg. |
+
+Die drei sind nicht austauschbar. `contextBudget` deckelt die gesamte Einfügung, `excerptChars` entscheidet, wie tief der Auszug in eine einzelne lange Seite hineinreicht — erhöhe es, wenn eine Seite die ganze Antwort enthält und der Auszug sie abschneidet —, und `maxResults` deckelt, wie viele Seiten der Abruf hinzufügt. Die Seite, die der Leser gerade betrachtet, wird zusätzlich zu den abgerufenen eingefügt, sodass eine Antwort bis zu eine Seite mehr zitieren kann, als `maxResults` angibt.
+
+Die Standardwerte passen zu einem gehosteten Modell. Senke sie, wenn du von eigener Hardware ausspielst und die Zeit bis zum ersten Token wichtiger ist als die Trefferabdeckung; Antworten bleiben so oder so fundiert, und dem Assistenten wird aufgetragen, zu sagen, wenn etwas nicht abgedeckt ist, statt die Lücke zu füllen.
 
 ### Externer Endpunkt
 
@@ -186,15 +237,17 @@ Ein statischer Build mit aktiviertem Ask AI und ohne externen `endpoint` schläg
 
 Standardmäßig läuft Ask AI über das **Vercel AI Gateway**: `model` ist eine `provider/model`-Zeichenkette, du wechselst Modelle also durch deren Änderung (`openai/gpt-5.5`, `anthropic/claude-sonnet-4-5` und so weiter), ohne ein Anbieter-SDK installieren zu müssen. Das Gateway liest `AI_GATEWAY_API_KEY` aus deiner Umgebung und wird bei einem Deployment auf Vercel automatisch verdrahtet.
 
-Setze `provider`, um Ask AI anderswohin zu leiten. Jedes Backend liest seinen API-Schlüssel aus einer Umgebungsvariablen, und das passende Anbieter-SDK wird beim Build automatisch zur Laufzeitumgebung deines Projekts hinzugefügt — nur dasjenige, das du verwendest:
+Setze `provider`, um Ask AI anderswohin zu leiten. Jedes Backend liest seinen API-Schlüssel aus einer Umgebungsvariablen und streamt über ein Anbieter-SDK, das du in deinem Projekt installierst — nur dasjenige, das du verwendest:
 
-| `provider` | `model` | Umgebungsvariable für den API-Schlüssel |
-| --- | --- | --- |
-| `gateway` (Standard) | eine `provider/model`-Zeichenkette über das AI Gateway | `AI_GATEWAY_API_KEY` |
-| `openrouter` | ein beliebiges [OpenRouter](https://openrouter.ai)-Modell | `OPENROUTER_API_KEY` |
-| `llmgateway` | ein beliebiges [LLMGateway](https://llmgateway.io)-Modell | `LLMGATEWAY_API_KEY` |
-| `inkeep` | ein [Inkeep](https://inkeep.com)-QA-Modell | `INKEEP_API_KEY` |
-| `openai-compatible` | was auch immer dein Endpunkt ausliefert | mit `apiKeyEnv` gesetzt |
+| `provider` | `model` | Umgebungsvariable für den API-Schlüssel | Zu installierendes SDK |
+| --- | --- | --- | --- |
+| `gateway` (Standard) | eine `provider/model`-Zeichenkette über das AI Gateway | `AI_GATEWAY_API_KEY` | keines — wird mit Blume mitgeliefert |
+| `openrouter` | ein beliebiges [OpenRouter](https://openrouter.ai)-Modell | `OPENROUTER_API_KEY` | `@openrouter/ai-sdk-provider` |
+| `llmgateway` | ein beliebiges [LLMGateway](https://llmgateway.io)-Modell | `LLMGATEWAY_API_KEY` | `@ai-sdk/openai-compatible` |
+| `inkeep` | ein [Inkeep](https://inkeep.com)-QA-Modell | `INKEEP_API_KEY` | `@ai-sdk/openai-compatible` |
+| `openai-compatible` | was auch immer dein Endpunkt ausliefert | mit `apiKeyEnv` gesetzt | `@ai-sdk/openai-compatible` |
+
+Die SDKs sind optionale Peer-Abhängigkeiten, füge deinem Projekt also dasjenige hinzu, das dein Backend benötigt (z. B. `npm install @openrouter/ai-sdk-provider`). Fehlt es, warnt der Build mit dem exakten Paketnamen, bevor Vite den Import nicht auflösen könnte.
 
 Um zum Beispiel OpenRouter zu verwenden:
 
@@ -339,7 +392,21 @@ Link: </agent-readability.json>; rel="describedby"; type="application/json",
   </index.md>; rel="alternate"; type="text/markdown"
 ```
 
-Jeder Eintrag erscheint nur, wenn die zugehörige Funktion aktiv ist. Der `alternate`-Link verweist auf den Markdown-Spiegel der Startseite — das [rohe Markdown](#raw-markdown) der Seite selbst, wenn die Startroute eine Inhaltsseite ist, oder den synthetisierten `llms.txt`-Fallback, wenn sie eine Landing Page ist. Websites, die APIs veröffentlichen, erhalten zusätzlich einen `rel="api-catalog"`-Eintrag, der auf den [generierten API-Katalog](#api-catalog) verweist. Der Header wird auf jeder von Blume kontrollierten Oberfläche mitgeliefert: dem Entwicklungsserver (prüfe ihn mit `curl -I localhost:4321`), statischen Builds über die erzeugte `_headers`-Datei (Netlify und Cloudflare) und Vercel-Server-Builds über die Routing-Regeln des Deployments. Hoster, die `_headers` bei statischer Ausgabe ignorieren (GitHub Pages, S3), können überhaupt keine eigenen Antwort-Header senden — dort finden Agents alles weiterhin über `llms.txt` und `agent-readability.json` im Stamm der Website.
+Jeder Eintrag erscheint nur, wenn die zugehörige Funktion aktiv ist. Der `alternate`-Link verweist auf den Markdown-Spiegel der Startseite — das [rohe Markdown](#raw-markdown) der Seite selbst, wenn die Startroute eine Inhaltsseite ist, oder den synthetisierten `llms.txt`-Fallback, wenn sie eine Landing Page ist. Websites, die APIs veröffentlichen, erhalten zusätzlich einen `rel="api-catalog"`-Eintrag, der auf den [generierten API-Katalog](#api-catalog) verweist. Der Header wird auf jeder von Blume kontrollierten Oberfläche mitgeliefert: dem Entwicklungsserver (prüfe ihn mit `curl -I localhost:4321`), statischen Builds über die erzeugte `_headers`-Datei (Netlify und Cloudflare) und Vercel-Server-Builds über die Routing-Regeln des Deployments.
+
+Nicht jeder Agent tritt jedoch über den Stamm ein — wer einem Suchergebnis oder einem geteilten Link folgt, landet auf einer tief liegenden Seite und sieht den Header der Startseite nie. Deshalb trägt jede gerenderte Seite dieselben Discovery-Links auch in ihrem HTML-`<head>`, unter Verwendung derselben IANA-registrierten Beziehungen:
+
+```html
+<link
+  rel="describedby"
+  href="/agent-readability.json"
+  type="application/json"
+/>
+<link rel="describedby" href="/llms.txt" type="text/plain" />
+<link rel="alternate" href="/docs/example.md" type="text/markdown" />
+```
+
+Hier verweist der `alternate`-Link auf den [Roh-Markdown-Spiegel](#raw-markdown) _der jeweiligen Seite_, sodass ein Agent direkt von dem HTML, auf dem er gelandet ist, zur token-effizienten Version springen kann. Da die Head-Links mit dem vorgerenderten HTML mitreisen, funktionieren sie auch bei Hostern, die `_headers` ignorieren und überhaupt keine eigenen Antwort-Header senden können (GitHub Pages, S3) — ganz gleich, über welche Seite der Agent eintritt.
 
 ### API-Katalog
 

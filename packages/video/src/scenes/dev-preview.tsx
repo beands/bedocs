@@ -23,7 +23,7 @@ import {
 import { SourceCode } from "@/scenes/source-code";
 
 // A single card telling the whole story in two phases:
-//   1. a glassy terminal runs `blume init` → `blume dev`; the docs site loads.
+//   1. a glassy terminal runs `bedocs init` → `bedocs dev`; the docs site loads.
 //   2. the chrome (terminal, header, sidebar, TOC) animates away, the content
 //      slides to the right half, and the page's MDX source fades in on the left
 //      — a live "markdown in, docs out" split.
@@ -72,7 +72,7 @@ const LINES: TermLine[] = [
   { delay: 14, kind: "cmd", text: "npx blume init" },
   { delay: 24, kind: "ok", pause: 6, text: "✓ Created docs/" },
   { delay: 8, kind: "ok", pause: 18, text: "✓ Created blume.config.ts" },
-  { delay: 24, kind: "cmd", text: "blume dev" },
+  { delay: 24, kind: "cmd", text: "bedocs dev" },
   { delay: 18, kind: "url", text: "→ running on localhost:4321" },
 ];
 

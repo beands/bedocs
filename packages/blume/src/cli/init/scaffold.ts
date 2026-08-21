@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 
+import { detect } from "package-manager-detector/detect";
 import { basename, dirname, isAbsolute, join, relative } from "pathe";
 
 import { bedocsPackageJson, toPackageName } from "../../core/package-json.ts";
@@ -291,6 +292,17 @@ export const commandsFor = (
 export const detectPackageManager = (userAgent?: string): PackageManager => {
   const name = userAgent?.split("/")[0] as PackageManager | undefined;
   return name !== undefined && PACKAGE_MANAGERS.includes(name) ? name : "npm";
+};
+
+/** Detect an existing project's package manager for commands such as eject. */
+export const detectProjectPackageManager = async (
+  root: string
+): Promise<PackageManager> => {
+  const detected = await detect({ cwd: root });
+  const name = detected?.name;
+  return name !== undefined && PACKAGE_MANAGERS.includes(name as PackageManager)
+    ? (name as PackageManager)
+    : detectPackageManager(process.env.npm_config_user_agent);
 };
 
 /**

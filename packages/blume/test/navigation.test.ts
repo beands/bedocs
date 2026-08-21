@@ -2,14 +2,18 @@ import { describe, expect, it } from "bun:test";
 
 import { buildNavigation } from "../src/core/navigation.ts";
 import { blumeConfigSchema, pageMetaSchema } from "../src/core/schema.ts";
-import type { FolderMeta, SidebarItemConfig } from "../src/core/schema.ts";
+import type {
+  FolderMeta,
+  PageMetaInput,
+  SidebarItemConfig,
+} from "../src/core/schema.ts";
 import type { Diagnostic, NavNode, PageRecord } from "../src/core/types.ts";
 
 const page = (
   id: string,
   route: string,
   title: string,
-  sidebar: Record<string, unknown> = {},
+  sidebar: PageMetaInput["sidebar"] = {},
   draft = false
 ): PageRecord => ({
   contentType: "doc",
@@ -29,6 +33,8 @@ const page = (
   sourcePath: `/abs/${id}`,
   title,
   translationKey: route,
+  version: "",
+  versionKey: route,
 });
 
 const changelogPage = (
@@ -50,6 +56,8 @@ const changelogPage = (
   source: { name: "releases", ref },
   title,
   translationKey: `/changelog/${ref}`,
+  version: "",
+  versionKey: `/changelog/${ref}`,
 });
 
 const asGroup = (node: NavNode | undefined) => {
@@ -333,6 +341,204 @@ describe("buildNavigation — filesystem sidebar", () => {
   });
 });
 
+describe("buildNavigation — per-group display", () => {
+  it("resolves a group's display from folder meta over the global mode", () => {
+    const nav = buildNavigation(
+      [
+        page("guide/setup.md", "/guide/setup", "Setup"),
+        page("api/auth.md", "/api/auth", "Auth"),
+      ],
+      {
+        folderMeta: new Map<string, FolderMeta>([
+          ["guide", { display: "page" }],
+        ]),
+      }
+    );
+    // Groups sort alphabetically: "Api" first, then "Guide".
+    expect(asGroup(nav.sidebar[1]).display).toBe("page");
+    // The sibling group keeps the global mode (default `flat`).
+    expect(asGroup(nav.sidebar[0]).display).toBe("flat");
+  });
+
+  it("lets index frontmatter sidebar.display beat folder meta", () => {
+    const nav = buildNavigation(
+      [
+        page("guide/index.md", "/guide", "Guide", { display: "page" }),
+        page("guide/setup.md", "/guide/setup", "Setup"),
+      ],
+      {
+        folderMeta: new Map<string, FolderMeta>([
+          ["guide", { display: "group" }],
+        ]),
+      }
+    );
+    const guide = asGroup(nav.sidebar[0]);
+    expect(guide.display).toBe("page");
+    // The index page still lists first inside the drill-in panel.
+    expect(labels(guide.children)).toStrictEqual(["Guide", "Setup"]);
+  });
+
+  it("falls back to a non-flat global mode when nothing overrides", () => {
+    const nav = buildNavigation(
+      [page("guide/setup.md", "/guide/setup", "Setup")],
+      { display: "group", folderMeta: empty }
+    );
+    expect(asGroup(nav.sidebar[0]).display).toBe("group");
+  });
+
+  it("does not inherit a group's display into nested subgroups", () => {
+    const nav = buildNavigation(
+      [
+        page("guide/index.md", "/guide", "Guide", { display: "page" }),
+        page("guide/advanced/tuning.md", "/guide/advanced/tuning", "Tuning"),
+      ],
+      { folderMeta: empty }
+    );
+    const guide = asGroup(nav.sidebar[0]);
+    expect(guide.display).toBe("page");
+    // The subgroup resolves its own chain and lands on the global default.
+    expect(asGroup(guide.children.at(-1))).toHaveProperty("display", "flat");
+  });
+
+  it("accepts a meta display on a parenthesized (group) folder", () => {
+    const nav = buildNavigation(
+      [page("(legal)/privacy.md", "/privacy", "Privacy")],
+      {
+        folderMeta: new Map<string, FolderMeta>([
+          ["(legal)", { display: "page" }],
+        ]),
+      }
+    );
+    expect(asGroup(nav.sidebar[0]).display).toBe("page");
+  });
+
+  it("applies a hidden index page's display without listing the page", () => {
+    const nav = buildNavigation(
+      [
+        page("guide/index.md", "/guide", "Guide", {
+          display: "page",
+          hidden: true,
+        }),
+        page("guide/setup.md", "/guide/setup", "Setup"),
+      ],
+      { folderMeta: empty }
+    );
+    const guide = asGroup(nav.sidebar[0]);
+    expect(guide.display).toBe("page");
+    expect(labels(guide.children)).toStrictEqual(["Setup"]);
+  });
+
+  it("hoists loose pages above a sibling group overridden to flat", () => {
+    const nav = buildNavigation(
+      [
+        page("guide/advanced/deep.md", "/guide/advanced/deep", "Deep"),
+        page("guide/zz-usage.md", "/guide/usage", "Usage"),
+      ],
+      {
+        display: "group",
+        folderMeta: new Map<string, FolderMeta>([
+          ["guide/advanced", { display: "flat" }],
+        ]),
+      }
+    );
+    // "Advanced" renders as a plain flat section header inside the
+    // collapsible "Guide" group, so a loose page sorted after it would
+    // visually read as its last child — hoist exactly like a flat sidebar.
+    const guide = asGroup(nav.sidebar[0]);
+    expect(asGroup(guide.children.at(-1)).display).toBe("flat");
+    expect(labels(guide.children)).toStrictEqual(["Usage", "Advanced"]);
+  });
+
+  it("keeps authored interleaving when no sibling group renders flat", () => {
+    const nav = buildNavigation(
+      [
+        page("guide/alpha/x.md", "/guide/alpha/x", "X"),
+        page("guide/zeta.md", "/guide/zeta", "Zeta"),
+      ],
+      {
+        folderMeta: new Map<string, FolderMeta>([
+          ["guide", { display: "page" }],
+          ["guide/alpha", { display: "group" }],
+        ]),
+      }
+    );
+    const guide = asGroup(nav.sidebar[0]);
+    expect(guide.display).toBe("page");
+    // Inside the drill-in panel the collapsible "Alpha" row is
+    // self-delimiting, so the loose page keeps its sorted position after it,
+    // exactly as a globally page/group sidebar would order the same tree —
+    // even though the global mode here is flat.
+    expect(labels(guide.children)).toStrictEqual(["Alpha", "Zeta"]);
+  });
+
+  it("warns when a non-index page sets sidebar.display", () => {
+    const diagnostics: Diagnostic[] = [];
+    buildNavigation(
+      [page("guide/setup.md", "/guide/setup", "Setup", { display: "page" })],
+      { diagnostics, folderMeta: empty }
+    );
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]?.code).toBe("BLUME_SIDEBAR_DISPLAY_IGNORED");
+    expect(diagnostics[0]?.file).toBe("/abs/guide/setup.md");
+    expect(diagnostics[0]?.message).toContain("guide/setup.md");
+  });
+
+  it("warns for a non-index sidebar.display even with an explicit sidebar", () => {
+    const diagnostics: Diagnostic[] = [];
+    const nav = buildNavigation(
+      [page("guide/setup.md", "/guide/setup", "Setup", { display: "page" })],
+      { diagnostics, folderMeta: empty, sidebar: ["guide/setup"] }
+    );
+    // The explicit sidebar still renders unchanged...
+    expect(labels(nav.sidebar)).toStrictEqual(["Setup"]);
+    // ...but the dead key is flagged instead of silently dropped.
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]?.code).toBe("BLUME_SIDEBAR_DISPLAY_IGNORED");
+    expect(diagnostics[0]?.file).toBe("/abs/guide/setup.md");
+  });
+
+  it("does not warn for display on an index page", () => {
+    const diagnostics: Diagnostic[] = [];
+    buildNavigation(
+      [
+        page("guide/index.md", "/guide", "Guide", { display: "page" }),
+        page("guide/setup.md", "/guide/setup", "Setup"),
+      ],
+      { diagnostics, folderMeta: empty }
+    );
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it("warns for an index page's sidebar.display under an explicit sidebar", () => {
+    // An explicit config sidebar never reads index frontmatter (or folder
+    // meta) display, so the usually-honored placement is dead there too —
+    // and the suggestion must point at the config, not at frontmatter.
+    const diagnostics: Diagnostic[] = [];
+    buildNavigation(
+      [page("guide/index.md", "/guide", "Guide", { display: "page" })],
+      { diagnostics, folderMeta: empty, sidebar: ["guide/index"] }
+    );
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]?.code).toBe("BLUME_SIDEBAR_DISPLAY_IGNORED");
+    expect(diagnostics[0]?.message).toContain("explicit navigation.sidebar");
+    expect(diagnostics[0]?.suggestion).toContain("navigation.sidebar");
+  });
+
+  it("warns for the content root index's sidebar.display", () => {
+    // The root is not a sidebar group, so a root index's display configures
+    // nothing — the sidebar-wide mode lives in navigation.sidebar.display.
+    const diagnostics: Diagnostic[] = [];
+    buildNavigation([page("index.md", "/", "Home", { display: "group" })], {
+      diagnostics,
+      folderMeta: empty,
+    });
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]?.code).toBe("BLUME_SIDEBAR_DISPLAY_IGNORED");
+    expect(diagnostics[0]?.message).toContain("content root");
+    expect(diagnostics[0]?.suggestion).toContain("navigation.sidebar.display");
+  });
+});
+
 describe("buildNavigation — group route paths", () => {
   it("keeps the folder route when the index page is inserted first", () => {
     // index.mdx sorts before its siblings, and an index page's route has no
@@ -607,6 +813,8 @@ describe("buildNavigation — index title / folder meta title diagnostics", () =
           sourcePath: "/abs/guide/index.md",
           title: "Index",
           translationKey: "/guide",
+          version: "",
+          versionKey: "/guide",
         },
       ],
       { diagnostics, folderMeta }

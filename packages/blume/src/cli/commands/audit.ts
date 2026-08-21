@@ -4,7 +4,6 @@ import {
   AGENTS,
   fixPrompt,
   launchAgent,
-  WINDOWS_COMMAND_NOT_FOUND,
   writeAgentReport,
 } from "../../audit/agent.ts";
 import type { AgentKind } from "../../audit/agent.ts";
@@ -41,22 +40,29 @@ export const shouldFail = (
 };
 
 /**
- * Launch the agent CLI, translating a missing executable into the Windows
- * not-found sentinel. Only `ENOENT` means "not installed" — any other spawn
- * failure (`EACCES`, `EMFILE`, …) must surface as itself, not be masked by an
- * irrelevant install hint.
+ * Launch the agent CLI, turning a missing executable into the install hint.
+ * Only `ENOENT` means "not installed" — any other spawn failure (`EACCES`,
+ * `EMFILE`, …) must surface as itself, not be masked by an irrelevant
+ * install hint.
  */
 const launchAgentCode = async (
-  bin: string,
+  agent: AgentKind,
   prompt: string
 ): Promise<number> => {
+  const cli = AGENTS[agent];
   try {
-    return await launchAgent(bin, prompt);
+    return await launchAgent(cli.bin, prompt);
   } catch (error) {
+    // SAFETY: only the `code` tag is inspected; a spawn failure throws an
+    // ErrnoException, and any other thrown value fails the comparison and
+    // rethrows unchanged.
     if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") {
       throw error;
     }
-    return WINDOWS_COMMAND_NOT_FOUND;
+    logger.error(
+      `${cli.name} (\`${cli.bin}\`) was not found on PATH. Install it with \`${cli.install}\`.`
+    );
+    return process.exit(1);
   }
 };
 
@@ -120,14 +126,16 @@ export const auditCommand = defineCommand({
     }
 
     const root = process.cwd();
-    const gate = (args["fail-on"] ??
-      (args.strict ? "warning" : "error")) as DiagnosticSeverity;
-    if (!SEVERITIES.includes(gate)) {
+    const gateInput = args["fail-on"] ?? (args.strict ? "warning" : "error");
+    const gate = SEVERITIES.find((severity) => severity === gateInput);
+    if (gate === undefined) {
       logger.error(
-        `Invalid --fail-on "${gate}" (use ${SEVERITIES.join(" | ")}).`
+        `Invalid --fail-on "${gateInput}" (use ${SEVERITIES.join(" | ")}).`
       );
       process.exit(1);
     }
+    // SAFETY: AGENTS is a closed record keyed by AgentKind, so its keys are
+    // exactly the agent kinds.
     const agents = (Object.keys(AGENTS) as AgentKind[]).filter(
       (kind) => args[kind]
     );
@@ -183,15 +191,7 @@ export const auditCommand = defineCommand({
       process.stderr.write(
         `  Handing ${count} finding${count === 1 ? "" : "s"} to ${cli.name}…\n\n`
       );
-      const code = await launchAgentCode(cli.bin, fixPrompt(report));
-      // A POSIX spawn rejects on a missing executable; the Windows shell
-      // launch reports it through cmd.exe's 9009 instead. Same diagnosis.
-      if (code === WINDOWS_COMMAND_NOT_FOUND) {
-        logger.error(
-          `${cli.name} (\`${cli.bin}\`) was not found on PATH. Install it with \`${cli.install}\`.`
-        );
-        process.exit(1);
-      }
+      const code = await launchAgentCode(agent, fixPrompt(report));
       if (code !== 0) {
         process.exit(code);
       }

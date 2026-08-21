@@ -2,8 +2,10 @@ import { fromMarkdown } from "mdast-util-from-markdown";
 import { gfmFromMarkdown } from "mdast-util-gfm";
 import { toString as mdastToString } from "mdast-util-to-string";
 import { gfm } from "micromark-extension-gfm";
+import stringWidth from "string-width";
 
 import matter from "../frontmatter.ts";
+import { columnsPrefix } from "../text-width.ts";
 import {
   hashText,
   loadWithCache,
@@ -61,9 +63,10 @@ const LEADING_V = /^v/iu;
 const NON_SLUG = /[^a-z0-9]+/gu;
 const EDGE_DASHES = /^-+|-+$/gu;
 
-// `bedocs audit` grades meta descriptions against the 110–160 character search
-// snippet range (audit/types.ts thresholds), so the derived summary aims for
-// the longest word-boundary cut under the cap.
+// `bedocs audit` grades meta descriptions against the 110–160 display-column
+// search snippet range (audit/types.ts thresholds), so the derived summary
+// budgets in the same columns and aims for the longest word-boundary cut
+// under the cap.
 const DESCRIPTION_MAX = 160;
 const DESCRIPTION_MIN = 110;
 
@@ -103,15 +106,17 @@ const releaseDescription = (body: string): string | undefined => {
   if (!text) {
     return undefined;
   }
-  if (text.length <= DESCRIPTION_MAX) {
+  if (stringWidth(text) <= DESCRIPTION_MAX) {
     return text;
   }
   // Cut before the cap at a word boundary (kept only when it doesn't drop the
   // summary under the minimum), shed any dangling punctuation, and mark the cut.
-  const slice = text.slice(0, DESCRIPTION_MAX - 1);
+  const slice = columnsPrefix(text, DESCRIPTION_MAX - 1);
   const boundary = slice.lastIndexOf(" ");
   const head = (
-    boundary >= DESCRIPTION_MIN ? slice.slice(0, boundary) : slice
+    boundary !== -1 && stringWidth(slice.slice(0, boundary)) >= DESCRIPTION_MIN
+      ? slice.slice(0, boundary)
+      : slice
   ).replace(TRAILING_FRAGMENT, "");
   return `${head}…`;
 };
@@ -131,6 +136,19 @@ const githubHeaders = (): Headers => {
 };
 
 /**
+ * The changelog frontmatter one release lowers to. `title`/`type` are always
+ * assigned (optional only so assignment order can keep the emitted YAML key
+ * order — and so each entry's content hash — stable).
+ */
+interface ChangelogFrontmatter {
+  changelog: { category: string; version: string };
+  date: string;
+  seo?: { description: string };
+  title?: string;
+  type?: string;
+}
+
+/**
  * Lower one release to a staged Markdown entry: the notes become the body,
  * `type: changelog` frontmatter (title/date/version/category) drives the
  * generated `/changelog` timeline and RSS feed, and a summary derived from the
@@ -146,19 +164,25 @@ const releaseToEntry = (release: GithubRelease): SourceEntry => {
   // description (instead of the site-wide fallback) without also rendering the
   // visible lede paragraph a top-level `description` would add.
   const description = releaseDescription(body);
-  const data = {
+  // Assignment order matters: js-yaml serializes keys in insertion order, so
+  // `seo` lands between `date` and `title` exactly as it always has.
+  const data: ChangelogFrontmatter = {
     changelog: { category, version },
     date,
-    ...(description ? { seo: { description } } : {}),
-    title,
-    type: "changelog",
   };
+  if (description) {
+    data.seo = { description };
+  }
+  data.title = title;
+  data.type = "changelog";
   const raw = matter.stringify(`${body}\n`, data);
   const fallbackRef = `release-${release.id}`;
   const ref = `${slugifyTag(release.tag_name) || fallbackRef}.md`;
   return {
     body: { format: "md", text: body },
-    data,
+    // Spread: `SourceEntry.data` is an open dictionary, which the interface
+    // (no index signature) only satisfies as a fresh object literal.
+    data: { ...data },
     editUrl: release.html_url,
     hash: hashText(raw),
     lastModified: date,
@@ -171,7 +195,7 @@ const releaseToEntry = (release: GithubRelease): SourceEntry => {
  * GitHub Releases content source. Pulls a repo's releases from the REST API and
  * materializes each as a `type: changelog` entry, so a project's release notes
  * become its changelog with no files to maintain. A private repo authenticates
- * with `GITHUB_TOKEN`. A snapshot under `.bedocs/cache/<source>/` keeps rebuilds
+ * with `GITHUB_TOKEN`. A snapshot under `.blume/cache/<source>/` keeps rebuilds
  * offline-tolerant.
  */
 export const githubReleasesSource = (
@@ -194,6 +218,8 @@ export const githubReleasesSource = (
     if (!res.ok) {
       throw new Error(`${url} -> ${res.status}`);
     }
+    // SAFETY: GitHub's releases endpoint returns a JSON array of release
+    // objects; `GithubRelease` models only the fields the adapter reads.
     return (await res.json()) as GithubRelease[];
   };
 
@@ -233,6 +259,8 @@ export const githubReleasesSource = (
       // repo), degrade to an empty changelog with a warning rather than failing
       // the whole build.
       snapshot = new Map();
+      // SAFETY: everything thrown on this path is an Error — fetch rejects
+      // with a TypeError, fetchPage and loadWithCache throw Error instances.
       return {
         diagnostics: [
           {

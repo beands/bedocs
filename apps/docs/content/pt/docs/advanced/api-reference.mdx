@@ -1,10 +1,10 @@
 ---
 title: OpenAPI / AsyncAPI
 description: >-
-  Adicione uma especificação OpenAPI e obtenha uma referência de API nativa — uma página real por operação, na sua barra lateral e na busca.
+  Adicione uma especificação OpenAPI ou AsyncAPI e obtenha uma referência de API nativa — uma página real por operação, na sua barra lateral e na busca.
 ---
 
-Aponte o Blume para uma especificação OpenAPI e ele gera uma referência de API nativa: uma **página real por operação**, agrupada por tag em uma barra lateral delimitada por aba, com tabelas de esquema, exemplos de requisição/resposta e amostras de código geradas. Como cada operação é uma página Blume genuína, ela ganha sua própria URL, aparece na **busca do site** e no `llms.txt`, e recebe uma imagem Open Graph — igual a qualquer documento escrito à mão. A configuração abaixo aponta o Blume para a especificação pública do Petstore como exemplo.
+Aponte o Blume para uma especificação OpenAPI e ele gera uma referência de API nativa: uma **página real por operação**, agrupada por tag em uma barra lateral delimitada por aba, com tabelas de esquema, exemplos de requisição/resposta, amostras de código geradas e um painel interativo [Try it](#try-it-playground). Como cada operação é uma página Blume genuína, ela ganha sua própria URL, aparece na **busca do site** e no `llms.txt`, e recebe uma imagem Open Graph — igual a qualquer documento escrito à mão. A configuração abaixo aponta o Blume para a especificação pública do Petstore como exemplo.
 
 ```ts blume.config.ts lineNumbers
 openapi: {
@@ -63,6 +63,42 @@ openapi: {
 }
 ```
 
+## Playground Try it
+
+Páginas de operação renderizadas nativamente vêm com um painel interativo **Try it** por padrão. O Blume gera o formulário a partir da própria operação: um campo por parâmetro de caminho, consulta e cabeçalho, um editor de corpo construído a partir do esquema do corpo da requisição, tudo pré-preenchido a partir dos exemplos da especificação. Um seletor de servidor lista os `servers` da especificação, com um campo de texto livre para qualquer outra URL base, e os campos de autenticação correspondem à [segurança resolvida](#authorization) da operação — token bearer, chave de API e credenciais basic, com OAuth2 como um campo para colar o token (traga um token de acesso; o Blume não executa o fluxo).
+
+O painel e as amostras de código andam em sincronia: valores digitados no formulário atualizam as amostras geradas ao vivo, então um comando curl copiado sempre corresponde exatamente ao que o **Send** faria. E ele fica fora do caminho — o painel é renderizado no servidor já recolhido, e seu JavaScript é carregado apenas quando um leitor o abre pela primeira vez. Leitores que nunca o tocam não baixam nada disso.
+
+`playground: false` é todo o interruptor de desligamento:
+
+```ts blume.config.ts lineNumbers
+openapi: {
+  enabled: true,
+  spec: "./openapi.yaml",
+  playground: false,
+}
+```
+
+### Credenciais
+
+As credenciais digitadas nos campos de autenticação ficam na memória e desaparecem ao recarregar. Marcar **Remember on this device** as persiste no `localStorage`, delimitado à origem da documentação — elas nunca são enviadas para lugar nenhum além da API que está sendo chamada. As amostras de código continuam exibindo espaços reservados (`YOUR_TOKEN` e companhia) independentemente do que for digitado, a menos que o leitor ative **Include my values in samples**.
+
+### CORS e o proxy
+
+Assim como no [renderizador Scalar](#o-renderizador-scalar), as requisições vão **diretamente do navegador** para a API de destino, então a API precisa permitir requisições de origem cruzada a partir do site de documentação (`Access-Control-Allow-Origin`). Para APIs que não podem, defina `playground.proxy`: uma URL roteia as requisições através de um proxy hospedado por você, e `true` habilita a rota interna `/_api-proxy` — que precisa de um build de servidor, então exige [`deployment.output: "server"`](/docs/deployment#server-rendering):
+
+```ts blume.config.ts lineNumbers
+openapi: {
+  enabled: true,
+  spec: "./openapi.yaml",
+  playground: {
+    proxy: true,   // or a URL of your own
+  },
+}
+```
+
+O proxy interno só encaminha requisições para as origens que suas especificações declaram em `servers` — inclusive através de redirecionamentos — então uma implantação pública de documentação não pode ser apontada para outros hosts na sua rede. Uma **Custom base URL** digitada no painel não é um servidor documentado: com o proxy habilitado, requisições para ela são recusadas com um 403.
+
 ## Múltiplas especificações
 
 Use `sources` para publicar mais de uma especificação. Cada fonte recebe sua própria rota de visão geral, páginas de operação e aba de cabeçalho. Dê a cada uma um `label` (usado para a aba e para derivar sua rota), ou defina uma `route` explícita:
@@ -104,7 +140,7 @@ openapi: {
 - `includeInLlms: false` as mantém fora de ambos os arquivos `llms.txt`.
 - `noindex: true` adiciona metadados noindex para rastreadores e remove as páginas do sitemap.
 
-Com o [renderizador Scalar](#the-scalar-renderer), apenas `noindex` se aplica — uma referência renderizada pelo Scalar já fica fora da busca e do `llms.txt` do Blume, então as duas configurações `include*` não têm sobre o que atuar ali.
+Com o [renderizador Scalar](#o-renderizador-scalar), apenas `noindex` se aplica — uma referência renderizada pelo Scalar já fica fora da busca e do `llms.txt` do Blume, então as duas configurações `include*` não têm sobre o que atuar ali.
 
 ## Autorização
 
@@ -119,7 +155,7 @@ A semântica do OpenAPI é mantida conforme escrita:
 
 ## O renderizador Scalar
 
-O renderizador nativo é o padrão. Se você preferir incorporar a referência de API autocontida do [Scalar](https://scalar.com) — com sua própria barra lateral, busca, tema e playground "Try it" em uma única rota — defina `renderer: "scalar"`:
+O renderizador nativo é o padrão — as páginas de operação, a integração com a busca e o [playground Try it](#playground-try-it) acima são todos obra dele. Se você preferir incorporar a interface de referência de API autocontida do [Scalar](https://scalar.com) — com sua própria barra lateral, busca, tema e cliente de requisições em uma única rota — defina `renderer: "scalar"`:
 
 ```ts blume.config.ts lineNumbers
 openapi: {
@@ -130,7 +166,7 @@ openapi: {
 }
 ```
 
-Uma referência renderizada pelo Scalar é uma incorporação autocontida em sua própria rota — ela não se integra à barra lateral, à busca ou ao `llms.txt` do Blume. Seu playground "Try it" chama sua **API de destino diretamente do navegador** (o Blume não faz proxy), então a API precisa permitir requisições de origem cruzada a partir do site de documentação (`Access-Control-Allow-Origin`). `theme` e o playground se aplicam apenas ao renderizador Scalar.
+Uma referência renderizada pelo Scalar é uma incorporação autocontida em sua própria rota — ela não se integra à barra lateral, à busca ou ao `llms.txt` do Blume, e a configuração [`playground`](#playground-try-it) do Blume não se aplica a ela. O Scalar traz seu próprio cliente de requisições, que chama sua **API de destino diretamente do navegador** (a rota `playground.proxy` não está disponível aqui), então a API precisa permitir requisições de origem cruzada a partir do site de documentação (`Access-Control-Allow-Origin`). `theme` se aplica apenas ao renderizador Scalar.
 
 ### Passando opções do Scalar
 
@@ -154,7 +190,7 @@ O [`i18n`](/docs/content/i18n) do próprio Blume traduz a interface da documenta
 
 ## AsyncAPI
 
-APIs orientadas a eventos usam um bloco irmão `asyncapi` com o mesmo formato. O AsyncAPI é renderizado pelo Scalar (o renderizador nativo é somente para OpenAPI por enquanto); apenas a rota padrão difere (`/events`):
+APIs orientadas a eventos usam um bloco irmão `asyncapi` com o mesmo formato — e o mesmo renderizador nativo. Cada operação `send`/`receive` se torna uma página real com tabelas de esquema do payload e dos cabeçalhos da mensagem, parâmetros de canal, bindings de protocolo, uma seção de Autorização derivada dos `securitySchemes` da especificação (em nível de servidor e de operação, com alternativas como grupos "ou") e um compositor de mensagens [Try it](#try-it-para-eventos). Apenas a rota padrão difere (`/events`):
 
 ```ts blume.config.ts lineNumbers
 asyncapi: {
@@ -163,6 +199,34 @@ asyncapi: {
 }
 ```
 
-:::warning
-O suporte do Scalar a AsyncAPI ainda está em desenvolvimento — ele renderiza canais, operações, mensagens e uma seção de Modelos, mas ainda **não há playground interativo** para eventos. Isso melhora com o tempo no projeto original.
+Especificações AsyncAPI **2.x são normalizadas para 3.x automaticamente** com o conversor oficial do AsyncAPI, então canais `publish`/`subscribe` são mapeados para páginas de operação `send`/`receive` com URLs estáveis — atualizar mais tarde o próprio arquivo de especificação através do conversor não move nada. As operações são agrupadas por tag; operações sem tag são agrupadas sob o endereço do seu canal.
+
+As amostras de código são **sensíveis ao protocolo**, derivadas do binding da operação (ou do protocolo dos seus servidores): `wscat` e um snippet de `WebSocket` do navegador para WebSockets, `kcat` para Kafka, `mosquitto_pub`/`mosquitto_sub` para MQTT. `codeSamples` filtra esse conjunto, da mesma forma que escolhe linguagens no bloco `openapi`; um protocolo sem uma ferramenta suportada renderiza apenas o exemplo de payload da mensagem em vez de um cliente fabricado.
+
+Tudo o que foi documentado acima se mantém, incluindo o [`playground`](#try-it-para-eventos): `route`, `sources` com `label`/`route`, `expandSchemas`, as flags de [indexação por fonte](#indexação-por-fonte) e a indexação de busca por resumo e tag da operação.
+
+Definir `renderer: "scalar"` volta a optar pelo SPA incorporado do Scalar, onde — como no OpenAPI — apenas `noindex` se aplica. O Scalar não tem um playground AsyncAPI próprio; sua incorporação detecta automaticamente o tipo de documento e renderiza canais, operações, mensagens e uma seção de Modelos, então essa troca abre mão do compositor.
+
+### Try it para eventos
+
+Páginas de operação renderizadas nativamente também vêm com um painel **Try it** aqui, nos mesmos termos do [painel OpenAPI](#playground-try-it): renderizado no servidor já recolhido, com seu JavaScript carregado apenas quando um leitor o abre pela primeira vez.
+
+Seja qual for o protocolo, o painel abre com um editor de payload pré-preenchido a partir dos `examples` da mensagem — ou, quando a mensagem não declara nenhum, a partir de um valor amostrado do esquema do payload — validado contra o esquema de payload da mensagem conforme você digita. Abaixo dele ficam um campo por parâmetro de canal e um seletor de servidor alimentado pelos `servers` do canal, com um campo de texto livre para qualquer outra URL. As amostras de código sensíveis ao protocolo andam em sincronia com o formulário exatamente como curl, js e python fazem em uma operação HTTP: o template de endereço do canal é preenchido com os valores de parâmetro que você digita, então um snippet copiado de `wscat`, `WebSocket`, `kcat` ou `mosquitto_pub` corresponde ao que o formulário diz.
+
+A conexão ao vivo é exclusiva para WebSocket. Em um binding `ws` ou `wss`, o painel se conecta à URL de canal resolvida, mostra o estado da conexão e registra cada frame com um timestamp. O AsyncAPI 3 declara uma ação do ponto de vista da API, e o painel segue isso: uma operação `receive` é uma que a API recebe de você, então ela ganha um botão **Send** que publica o payload composto; uma operação `send` apenas transmite mensagens para você, então ela se conecta e registra. Não há lógica de reconexão — uma vez que um socket fecha, ele permanece fechado até você conectar novamente. Kafka, MQTT, AMQP e todos os outros protocolos recebem o compositor e as amostras de CLI copiáveis, e o painel diz isso na própria página: o Blume não simula conectividade com broker a partir de uma aba do navegador.
+
+`asyncapi.playground` espelha `openapi.playground` — ligado por padrão com o renderizador nativo, e `false` é todo o interruptor de desligamento:
+
+```ts blume.config.ts lineNumbers
+asyncapi: {
+  enabled: true,
+  spec: "./asyncapi.yaml",
+  playground: false,
+}
+```
+
+:::note
+`playground.proxy` é exclusivo do OpenAPI. Ele encaminha requisições HTTP, e uma conexão WebSocket vai direto do navegador para o servidor nomeado na URL, então não há nada na frente de que um proxy possa ficar.
 :::
+
+O compositor de eventos não coleta credenciais de broker. A seção **Authorization** de cada página de operação documenta o que o broker espera, e uma conexão WebSocket carrega apenas o que já está na URL. Nada é persistido para operações de evento.

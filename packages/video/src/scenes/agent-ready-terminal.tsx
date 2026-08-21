@@ -12,7 +12,7 @@ import {
 //   AgentCurl — an agent's-eye view of the front door: `curl -I` shows the
 //   discovery Link headers, then `Accept: text/markdown` gets a page back as
 //   Markdown (both real responses from a deployed Blume site).
-//   AgentBuild — `blume build` emits the whole discovery layer (the real
+//   AgentBuild — `bedocs build` emits the whole discovery layer (the real
 //   logger.success lines), then `tree dist/.well-known` shows what landed.
 
 const MONO = "var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace";
@@ -125,7 +125,7 @@ const CURL_LINES: TermLine[] = [
 // strings the CLI prints; the tree is the `.well-known` directory it leaves
 // in dist.
 const BUILD_LINES: TermLine[] = [
-  { delay: 16, kind: "cmd", text: "blume build" },
+  { delay: 16, kind: "cmd", text: "bedocs build" },
   { delay: 10, kind: "blank" },
   { delay: 0, kind: "ok", text: "Generated llms.txt and llms-full.txt" },
   { delay: 4, kind: "ok", text: "Generated agent-readability.json" },

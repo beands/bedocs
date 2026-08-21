@@ -107,6 +107,28 @@ describe("buildSnapshot", () => {
     expect(result.wordCount).toBe(4);
   });
 
+  it("counts unspaced CJK prose as words, not as one token per page", () => {
+    // A Japanese page has no interword spaces; the old whitespace split
+    // counted the entire paragraph as ~1 "word" and tripped the low-word-count
+    // check on every page of a CJK site. Dictionary segmentation counts real
+    // words, so a substantial paragraph clears the 50-word threshold. The
+    // assertion is a range, not an exact count — ICU segmentation differs
+    // slightly across platforms.
+    const sentence =
+      "日本語のドキュメントページには単語の区切りとなる空白がありません。";
+    const result = snap(
+      `<html lang="ja"><main><p>${sentence.repeat(10)}</p></main></html>`
+    );
+    expect(result.wordCount).toBeGreaterThan(50);
+  });
+
+  it("falls back to the default locale for an unparseable lang", () => {
+    const result = snap(
+      '<html lang="not a bcp47 tag!"><main><p>Three words here.</p></main></html>'
+    );
+    expect(result.wordCount).toBe(3);
+  });
+
   it("hashes prose so identical pages collide and different ones do not", () => {
     const a = snap(page("<main><p>Same words here.</p></main>"));
     const b = snap(page("<main><p>Same words here.</p></main>"));
@@ -162,6 +184,8 @@ describe("buildSnapshot", () => {
   });
 
   it("carries the source file through from the route manifest", () => {
+    // SAFETY: snap reads only the route's sourcePath; the other manifest
+    // fields never come into play here.
     const route = { sourcePath: "/docs/x.mdx" } as RouteManifestEntry;
     expect(snap(page("<main>x</main>"), route).source).toBe("/docs/x.mdx");
     expect(snap(page("<main>x</main>")).source).toBeUndefined();

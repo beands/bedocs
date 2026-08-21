@@ -1,3 +1,9 @@
+import type { Nodes } from "mdast";
+import { fromMarkdown } from "mdast-util-from-markdown";
+import { toString as mdastToString } from "mdast-util-to-string";
+import stringWidth from "string-width";
+
+import { columnsPrefix } from "../core/text-width.ts";
 import type { ApiOperationRef, ApiSpecData } from "./model.ts";
 import type { ReferenceSource } from "./references.ts";
 
@@ -18,49 +24,95 @@ import type { ReferenceSource } from "./references.ts";
 // deliberately not escaped: it isn't MDX-special on its own, and escaping it
 // turns a `> Note:` blockquote into literal "&gt; Note:" text.
 const MDX_UNSAFE = /[<{}]/gu;
-const ENTITIES: Record<string, string> = {
-  "<": "&lt;",
-  "{": "&#123;",
-  "}": "&#125;",
-};
+const ENTITIES = new Map([
+  ["<", "&lt;"],
+  ["{", "&#123;"],
+  ["}", "&#125;"],
+]);
 // MDX also parses lines starting with `import`/`export` as ESM ("import the
 // SDK…" is common spec prose). Entity-escape the keyword's first letter so the
 // construct can't match; it still renders as the literal word.
 const MDX_ESM_KEYWORD = /^(?<keyword>import|export)\b/gmu;
-// Backtick code — inline spans and fences alike — is already literal in MDX,
-// and entities are NOT decoded inside it, so escaping there would render the
-// entity text verbatim (`/pets/&#123;petId&#125;`). Matching any balanced
-// backtick run covers `code`, ``code``, and ```fences``` in one shot. Both
-// runs are pinned by the backtick lookarounds: CommonMark pairs a span only
-// with an *equal-length* run, so without them a lone backtick would "close" on
-// the first backtick of a longer fence run — leaving `{` in the real prose
-// unescaped (a compile error) and escaping entities into the fence body.
-const BACKTICK_CODE = /(?<!`)(?<bt>`+)(?!`)[\s\S]*?(?<!`)\k<bt>(?!`)/gu;
-
 const escapeProse = (text: string): string =>
   text
-    .replace(MDX_UNSAFE, (char) => ENTITIES[char] ?? char)
+    .replace(MDX_UNSAFE, (char) => ENTITIES.get(char) ?? char)
     .replace(
       MDX_ESM_KEYWORD,
       (keyword) => `&#${keyword.codePointAt(0)};${keyword.slice(1)}`
     );
 
-/** Escape MDX-special syntax in prose while leaving backtick code verbatim. */
+/**
+ * The source offset ranges of code constructs — inline spans and fences —
+ * that MDX treats as literal (entities are NOT decoded inside them, so
+ * escaping there would render `/pets/&#123;petId&#125;` verbatim). The ranges
+ * come from a CommonMark parse rather than fence-emulating regexes: the
+ * parser is the authority on equal-length backtick pairing, longer tilde
+ * closers, unclosed fences running to EOF, and fences nested in blockquotes —
+ * each of which the replaced regexes had to re-derive (two with a recorded
+ * bug history in this file).
+ *
+ * One CommonMark construct is deliberately *not* masked: indented code. MDX
+ * disables indented code blocks, so a 4-space-indented sample is a paragraph
+ * whose braces genuinely need escaping; fence-or-backtick is told apart from
+ * indentation by the construct's first character.
+ */
+const codeSpans = (text: string): [number, number][] => {
+  const spans: [number, number][] = [];
+  const collect = (node: Nodes): void => {
+    if (node.type === "inlineCode" || node.type === "code") {
+      // fromMarkdown always stamps positions; -1 is an unreachable guard.
+      const start = node.position?.start.offset ?? -1;
+      const end = node.position?.end.offset ?? -1;
+      const head = text.slice(Math.max(start, 0), Math.max(end, 0)).trimStart();
+      if (
+        start >= 0 &&
+        (node.type === "inlineCode" ||
+          head.startsWith("`") ||
+          head.startsWith("~"))
+      ) {
+        spans.push([start, end]);
+      }
+      return;
+    }
+    if ("children" in node) {
+      for (const child of node.children) {
+        collect(child);
+      }
+    }
+  };
+  collect(fromMarkdown(text));
+  return spans;
+};
+
+/** Escape MDX-special syntax in prose while leaving code verbatim. */
 const mdxSafe = (text: string): string => {
   let out = "";
   let cursor = 0;
-  for (const match of text.matchAll(BACKTICK_CODE)) {
-    const start = match.index ?? 0;
+  for (const [start, end] of codeSpans(text)) {
     out += escapeProse(text.slice(cursor, start));
-    out += match[0];
-    cursor = start + match[0].length;
+    out += text.slice(start, end);
+    cursor = end;
   }
   return out + escapeProse(text.slice(cursor));
 };
 
+/**
+ * Frontmatter emitted for one operation or overview page. Boolean flags are
+ * assigned only when set, so absent keys stay absent in the staged MDX.
+ */
+export interface RenderedPageData {
+  ai?: { exclude: boolean };
+  deprecated?: boolean;
+  search?: { exclude?: boolean; tags?: string[] };
+  seo: { description: string; noindex?: boolean };
+  sidebar: { badge?: string; label: string };
+  title: string;
+  type?: string;
+}
+
 /** Frontmatter + body for one operation or overview page. */
 export interface RenderedPage {
-  data: Record<string, unknown>;
+  data: RenderedPageData;
   body: string;
 }
 
@@ -70,33 +122,36 @@ export interface RenderedPage {
 // `description`: the prose already renders in the body, and a `description`
 // frontmatter field would print it a second time as the page subtitle.
 const META_DESCRIPTION_MAX = 160;
-const PARAGRAPH_BREAK = /\n\s*\n/u;
-const MARKDOWN_LINK = /\[(?<text>[^\]]*)\]\([^)]*\)/gu;
-const MARKDOWN_MARKS = /[*_`#>]/gu;
 const WHITESPACE = /\s+/gu;
 const TRAILING_WORD = /\s+\S*$/u;
 
-/** Flatten markdown prose to its first paragraph as single-line plain text. */
-const plainProse = (markdown: string): string =>
-  (markdown.trim().split(PARAGRAPH_BREAK).at(0) ?? "")
-    .replace(MARKDOWN_LINK, "$<text>")
-    .replace(MARKDOWN_MARKS, "")
-    .replace(WHITESPACE, " ")
-    .trim();
+/**
+ * Flatten markdown prose to its first paragraph as single-line plain text,
+ * via a real parse (`mdast-util-to-string`). The regex strip this replaces
+ * was lossy on literal prose — `snake_case` → `snakecase`, `C#` → `C` — and
+ * these strings ship as `seo.description` meta tags. A description with no
+ * paragraph (say, only a heading or list) falls back to its first block.
+ */
+const plainProse = (markdown: string): string => {
+  const tree = fromMarkdown(markdown);
+  const first =
+    tree.children.find((node) => node.type === "paragraph") ?? tree.children[0];
+  return first ? mdastToString(first).replace(WHITESPACE, " ").trim() : "";
+};
 
-/** Cap `text` at `max` characters, cutting on a word boundary. */
+/** Cap `text` at `max` display columns, cutting on a word boundary. */
 const clip = (text: string, max: number): string => {
   if (max <= 0) {
     return "";
   }
-  if (text.length <= max) {
+  if (stringWidth(text) <= max) {
     return text;
   }
-  const head = text.slice(0, max - 1);
+  const head = columnsPrefix(text, max - 1);
   const onWordBoundary = head.replace(TRAILING_WORD, "");
   // One very long token — an endpoint path has no spaces — would be dropped
   // whole, leaving a stub. Hard-cut it instead of losing it.
-  return `${onWordBoundary.length >= max / 2 ? onWordBoundary : head}…`;
+  return `${stringWidth(onWordBoundary) >= max / 2 ? onWordBoundary : head}…`;
 };
 
 const apiName = (spec: ApiSpecData): string => spec.title || spec.label;
@@ -110,11 +165,14 @@ const operationDescription = (
   spec: ApiSpecData,
   operation: ApiOperationRef
 ): string => {
-  const endpoint = `${operation.method.toUpperCase()} ${operation.path}`;
-  const suffix = `Reference for the ${endpoint} endpoint in the ${apiName(spec)} API.`;
+  // AsyncAPI operations act on a channel, not an HTTP endpoint.
+  const suffix =
+    spec.kind === "asyncapi"
+      ? `Reference for the ${operation.method} operation on ${operation.path} in the ${apiName(spec)} API.`
+      : `Reference for the ${operation.method.toUpperCase()} ${operation.path} endpoint in the ${apiName(spec)} API.`;
   const prose = clip(
     plainProse(operation.description || operation.summary),
-    META_DESCRIPTION_MAX - suffix.length - 1
+    META_DESCRIPTION_MAX - stringWidth(suffix) - 1
   );
   return clip([prose, suffix].filter(Boolean).join(" "), META_DESCRIPTION_MAX);
 };
@@ -141,22 +199,35 @@ export const operationMdx = (
     operation.description.trim() === operation.summary.trim()
       ? ""
       : operation.description;
+  const flags: Pick<RenderedPageData, "ai" | "deprecated"> = {};
+  if (reference?.includeInLlms === false) {
+    flags.ai = { exclude: true };
+  }
+  if (operation.deprecated) {
+    flags.deprecated = true;
+  }
+  const searchFlags: Pick<
+    NonNullable<RenderedPageData["search"]>,
+    "exclude"
+  > = {};
+  if (reference?.includeInSearch === false) {
+    searchFlags.exclude = true;
+  }
+  const seo: RenderedPageData["seo"] = {
+    description: operationDescription(spec, operation),
+  };
+  if (reference?.noindex) {
+    seo.noindex = true;
+  }
   return {
     body: withDescription(
       description,
       `<Operation source="${spec.slug}" id="${operation.key}" />`
     ),
     data: {
-      ...(reference?.includeInLlms === false ? { ai: { exclude: true } } : {}),
-      ...(operation.deprecated ? { deprecated: true } : {}),
-      search: {
-        ...(reference?.includeInSearch === false ? { exclude: true } : {}),
-        tags: [operation.tag, method],
-      },
-      seo: {
-        description: operationDescription(spec, operation),
-        ...(reference?.noindex ? { noindex: true } : {}),
-      },
+      ...flags,
+      search: { ...searchFlags, tags: [operation.tag, method] },
+      seo,
       sidebar: { badge: method, label: operation.summary || operation.path },
       title,
       // Signals the two-column API layout (request panel instead of the TOC).
@@ -214,6 +285,21 @@ export const overviewMdx = (
       ].join("\n\n")
     );
   }
+  const flags: Pick<RenderedPageData, "ai" | "search"> = {};
+  if (reference?.includeInLlms === false) {
+    flags.ai = { exclude: true };
+  }
+  if (reference?.includeInSearch === false) {
+    flags.search = { exclude: true };
+  }
+  const seo: RenderedPageData["seo"] = {
+    description:
+      clip(plainProse(spec.description), META_DESCRIPTION_MAX) ||
+      `${apiName(spec)} API reference.`,
+  };
+  if (reference?.noindex) {
+    seo.noindex = true;
+  }
   return {
     body: [
       withDescription(
@@ -223,16 +309,8 @@ export const overviewMdx = (
       ...tagSections,
     ].join("\n\n"),
     data: {
-      ...(reference?.includeInLlms === false ? { ai: { exclude: true } } : {}),
-      ...(reference?.includeInSearch === false
-        ? { search: { exclude: true } }
-        : {}),
-      seo: {
-        description:
-          clip(plainProse(spec.description), META_DESCRIPTION_MAX) ||
-          `${apiName(spec)} API reference.`,
-        ...(reference?.noindex ? { noindex: true } : {}),
-      },
+      ...flags,
+      seo,
       sidebar: { label: "Overview" },
       title: apiName(spec),
     },

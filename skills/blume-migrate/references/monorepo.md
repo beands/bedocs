@@ -98,7 +98,7 @@ Rules:
 
 ## 4. Vercel monorepo recipe (root-aware install + build)
 
-A plain `blume build` works locally, but Vercel in a workspace needs three things aligned: the install must run at the **workspace root** (so pnpm resolves the whole graph under a frozen lockfile), the build must run in the **docs package**, and Vercel must be pointed at the built `dist/`. `blume build` emits a static site to `dist/` **relative to where it runs** — so building in `apps/docs/` produces `apps/docs/dist/`.
+A plain `bedocs build` works locally, but Vercel in a workspace needs three things aligned: the install must run at the **workspace root** (so pnpm resolves the whole graph under a frozen lockfile), the build must run in the **docs package**, and Vercel must be pointed at the built `dist/`. `bedocs build` emits a static site to `dist/` **relative to where it runs** — so building in `apps/docs/` produces `apps/docs/dist/`.
 
 This is a **copyable template**, not prose. Three pieces:
 
@@ -107,9 +107,9 @@ This is a **copyable template**, not prose. Three pieces:
 ```json
 {
   "scripts": {
-    "dev": "blume dev",
-    "build": "blume build",
-    "preview": "blume preview"
+    "dev": "bedocs dev",
+    "build": "bedocs build",
+    "preview": "bedocs preview"
   },
   "dependencies": {
     "blume": "^1"
@@ -137,7 +137,7 @@ This is a **copyable template**, not prose. Three pieces:
 How the pieces fit, with Root Directory = `apps/docs`:
 
 - `installCommand` does `cd ../..` to reach the **workspace root** and runs a frozen install of the whole graph. **Adjust `../..` to the app's actual depth** — an app at `packages/web/docs/` needs `cd ../../..`. Read the path; don't assume two levels.
-- `buildCommand` runs in `apps/docs/` and invokes `blume build` (via the package's `build` script) → emits `apps/docs/dist/`.
+- `buildCommand` runs in `apps/docs/` and invokes `bedocs build` (via the package's `build` script) → emits `apps/docs/dist/`.
 - `outputDirectory: "dist"` is relative to the Root Directory (`apps/docs`), so it points at `apps/docs/dist/`.
 - `framework: null` stops Vercel from auto-detecting Astro and overriding your build/output with its Astro preset (which expects a different output path). Blume's static output is plain files — Vercel just serves the folder.
 
@@ -151,7 +151,7 @@ Report every piece you wrote and the two dashboard settings the user must set by
 
 ## 5. Astro/Vite version mismatch → pnpm patch (manual)
 
-Blume pins **`astro ^7`**. If the workspace forces a specific **Vite** version — a root `pnpm.overrides` / `resolutions` entry, or a `vite` in the workspace catalog — that pinned Vite can diverge from the version Astro 7 expects, and Astro's internal build behavior mismatches. The symptom is a **build-time crash inside Astro/Vite** (a Rollup/Vite internal error, a missing-export or hook-signature error deep in `astro`/`vite` during `blume build`) that doesn't reproduce in a clean, override-free project.
+Blume pins **`astro ^7`**. If the workspace forces a specific **Vite** version — a root `pnpm.overrides` / `resolutions` entry, or a `vite` in the workspace catalog — that pinned Vite can diverge from the version Astro 7 expects, and Astro's internal build behavior mismatches. The symptom is a **build-time crash inside Astro/Vite** (a Rollup/Vite internal error, a missing-export or hook-signature error deep in `astro`/`vite` during `bedocs build`) that doesn't reproduce in a clean, override-free project.
 
 **Detect the risk factor** before it bites:
 
@@ -180,7 +180,7 @@ patchedDependencies:
   astro@7.0.6: patches/astro@7.0.6.patch
 ```
 
-Commit **both** `patches/astro@7.0.6.patch` and the `patchedDependencies` entry, then re-run `pnpm install` and `blume build`.
+Commit **both** `patches/astro@7.0.6.patch` and the `patchedDependencies` entry, then re-run `pnpm install` and `bedocs build`.
 
 This is a **manual step — do not fabricate the patch contents.** Leave the user this exact recipe plus the crash's stack trace, and tell them: the cleaner long-term fix is to relax the workspace's Vite pin so Astro 7 resolves its own compatible Vite, and drop the patch once Blume ships version validation. Don't fail silently — if a build crashes inside Astro/Vite and a Vite override exists, name this as the likely cause.
 

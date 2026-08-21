@@ -1,6 +1,9 @@
 import { readFile, stat } from "node:fs/promises";
 
 import { XMLParser } from "fast-xml-parser";
+import type { Nodes } from "mdast";
+import { fromMarkdown } from "mdast-util-from-markdown";
+import pMap from "p-map";
 import { join, relative } from "pathe";
 import { glob } from "tinyglobby";
 
@@ -17,6 +20,13 @@ import type { LlmsDoc, PageSnapshot, RobotsDoc, SitemapDoc } from "./types.ts";
  * findings nobody can act on.
  */
 const EXAMPLES_PREFIX = `${examplesRouteBase("")}/`;
+
+/**
+ * Ceiling on concurrent file reads/stats while crawling. Unbounded fan-out
+ * over a large `dist` risks EMFILE and holds every page's HTML in memory at
+ * once.
+ */
+const CRAWL_CONCURRENCY = 16;
 
 /** Everything read off disk in one pass over the built site. */
 export interface CrawlResult {
@@ -45,12 +55,14 @@ export const fileToUrl = (staticDir: string, file: string): string => {
  */
 const indexFiles = async (staticDir: string): Promise<Map<string, number>> => {
   const found = await glob("**/*", { cwd: staticDir, dot: true });
-  const sized = await Promise.all(
-    found.map(async (file) => {
+  const sized = await pMap(
+    found,
+    async (file) => {
       const path = `/${file.replaceAll("\\", "/")}`;
       const info = await stat(join(staticDir, file));
       return [path, info.size] as const;
-    })
+    },
+    { concurrency: CRAWL_CONCURRENCY }
   );
   return new Map(sized);
 };
@@ -92,6 +104,35 @@ const sitemapParser = new XMLParser({
 });
 
 /**
+ * What fast-xml-parser produces for a parsed element: a string for text
+ * content (`parseTagValue: false`), an object of child elements, an array for
+ * a repeated element, or null for a self-closed one.
+ */
+type XmlValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | XmlValue[]
+  | { [element: string]: XmlValue };
+
+/**
+ * fast-xml-parser models an element with child elements as an object; a
+ * text-only or self-closed element parses to a string or null instead, which
+ * these guards reject the same way the crawler always has.
+ */
+const isUrlsetElement = (value: XmlValue): value is { url?: XmlValue } =>
+  typeof value === "object" && value !== null;
+
+const isUrlEntry = (
+  value: XmlValue
+): value is { lastmod?: XmlValue; loc?: XmlValue } =>
+  typeof value === "object" && value !== null;
+
+const isText = (value: XmlValue): value is string => typeof value === "string";
+
+/**
  * Parse `sitemap.xml`. Deliberately shallow: the checks only need the `<loc>`
  * list, each loc's `<lastmod>`, and whether the document is a urlset at all.
  */
@@ -101,9 +142,9 @@ export const parseSitemap = (
   bytes: number
 ): SitemapDoc => {
   const doc: SitemapDoc = { bytes, file, lastmod: new Map(), urls: [] };
-  let parsed: Record<string, unknown>;
+  let parsed: { sitemapindex?: XmlValue; urlset?: XmlValue };
   try {
-    parsed = sitemapParser.parse(xml) as Record<string, unknown>;
+    parsed = sitemapParser.parse(xml);
   } catch {
     doc.error = "no <urlset> element";
     return doc;
@@ -114,20 +155,19 @@ export const parseSitemap = (
       : "no <urlset> element";
     return doc;
   }
-  const urlset = parsed.urlset as { url?: unknown } | string | null;
-  const entries =
-    typeof urlset === "object" && urlset !== null ? [urlset.url].flat() : [];
+  const { urlset } = parsed;
+  const entries = isUrlsetElement(urlset) ? [urlset.url].flat() : [];
   for (const entry of entries) {
-    if (typeof entry !== "object" || entry === null) {
+    if (!isUrlEntry(entry)) {
       continue;
     }
-    const { loc, lastmod } = entry as { loc?: unknown; lastmod?: unknown };
-    const locText = typeof loc === "string" ? loc.trim() : "";
+    const { loc, lastmod } = entry;
+    const locText = isText(loc) ? loc.trim() : "";
     if (!locText) {
       continue;
     }
     doc.urls.push(locText);
-    if (typeof lastmod === "string" && lastmod.trim() !== "") {
+    if (isText(lastmod) && lastmod.trim() !== "") {
       doc.lastmod?.set(locText, lastmod.trim());
     }
   }
@@ -135,21 +175,32 @@ export const parseSitemap = (
 };
 
 /**
- * Parse the `llms.txt` index into its Markdown link targets. Deliberately
- * shallow, like {@link parseSitemap}: the checks only need "which pages does
- * this file claim exist", not a Markdown AST.
+ * Parse the `llms.txt` index into its Markdown link targets, with the line
+ * each target sits on so findings can point at it. A real parse rather than a
+ * `](url)` regex: angle-bracket destinations, link titles, reference-style
+ * links (the definition line carries the URL), and autolinks all resolve, and
+ * a link-shaped string inside a fenced code block is no longer reported as a
+ * claim. Blume's own llms.txt only emits inline links, but the file is also
+ * hand-edited.
  */
 export const parseLlms = (file: string, text: string): LlmsDoc => {
   const entries: LlmsDoc["entries"] = [];
-  const link = /\]\((?<url>[^)\s]+)\)/gu;
-  for (const [index, line] of text.split(/\r?\n/u).entries()) {
-    for (const match of line.matchAll(link)) {
-      const url = match.groups?.url;
-      if (url) {
-        entries.push({ line: index + 1, url });
+  const collect = (node: Nodes): void => {
+    if (
+      (node.type === "link" ||
+        node.type === "image" ||
+        node.type === "definition") &&
+      node.url
+    ) {
+      entries.push({ line: node.position?.start.line ?? 1, url: node.url });
+    }
+    if ("children" in node) {
+      for (const child of node.children) {
+        collect(child);
       }
     }
-  }
+  };
+  collect(fromMarkdown(text));
   return { entries, file };
 };
 
@@ -214,8 +265,9 @@ export const crawlStaticDir = async (options: {
   const routes = routeIndex(manifest, basePath);
 
   const htmlFiles = await glob("**/*.html", { absolute: true, cwd: staticDir });
-  const snapshots = await Promise.all(
-    htmlFiles.toSorted().map(async (file) => {
+  const snapshots = await pMap(
+    htmlFiles.toSorted(),
+    async (file) => {
       const url = fileToUrl(staticDir, file);
       if (stripBasePath(basePath, url).startsWith(EXAMPLES_PREFIX)) {
         return null;
@@ -230,7 +282,8 @@ export const crawlStaticDir = async (options: {
         route: routes.get(url) ?? routes.get(stripBasePath(basePath, url)),
         url,
       });
-    })
+    },
+    { concurrency: CRAWL_CONCURRENCY }
   );
   const pages = snapshots.filter((page) => page !== null);
 

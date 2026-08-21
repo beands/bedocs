@@ -1,6 +1,6 @@
-import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 
+import spawn from "cross-spawn";
 import { join } from "pathe";
 import { z } from "zod";
 
@@ -48,7 +48,6 @@ export interface HeadlessResult {
 
 export interface HeadlessOptions {
   cwd: string;
-  platform?: NodeJS.Platform;
   prompt: string;
   timeoutMs: number;
 }
@@ -58,6 +57,15 @@ export interface HeadlessOptions {
  * cmd.exe newline quoting alike), stdout and stderr captured, SIGTERM at the
  * deadline with a SIGKILL follow-up. Resolves with the captured result;
  * rejects only when the executable cannot be spawned at all (ENOENT).
+ *
+ * Spawned through cross-spawn, which runs npm's `.cmd` shims on Windows with
+ * its own cmd.exe escaping — under the old `shell: true` launch, cmd.exe was
+ * free to mangle the JSON carried by codex's `-c` arguments, and a missing
+ * executable surfaced as exit code 9009 instead of an ENOENT rejection.
+ * execa was evaluated and rejected here: it waits for the stdio streams to
+ * close, and the `exit`-beats-`close` resolution below exists precisely
+ * because a killed agent's own children (an MCP server, a shell) hold the
+ * pipes open past the SIGTERM.
  */
 export const runAgentHeadless = (
   bin: string,
@@ -66,23 +74,18 @@ export const runAgentHeadless = (
 ): Promise<HeadlessResult> =>
   // oxlint-disable-next-line promise/avoid-new -- adapt spawn's event callbacks
   new Promise((resolve, reject) => {
-    const platform = options.platform ?? process.platform;
-    // npm installs agent CLIs as `.cmd` shims on Windows, which Node refuses
-    // to spawn without a shell. Arguments are plain flags and absolute paths,
-    // so shell interpolation has nothing to mangle.
     const child = spawn(bin, args, {
       cwd: options.cwd,
-      shell: platform === "win32",
       stdio: ["pipe", "pipe", "pipe"],
     });
 
     let stdout = "";
     let stderr = "";
     let timedOut = false;
-    child.stdout.on("data", (chunk: Buffer) => {
+    child.stdout?.on("data", (chunk: Buffer) => {
       stdout += chunk.toString("utf-8");
     });
-    child.stderr.on("data", (chunk: Buffer) => {
+    child.stderr?.on("data", (chunk: Buffer) => {
       stderr += chunk.toString("utf-8");
     });
 
@@ -112,7 +115,7 @@ export const runAgentHeadless = (
       }
     });
 
-    child.stdin.end(options.prompt);
+    child.stdin?.end(options.prompt);
   });
 
 /** The spawn signature `runEval` accepts, injectable for tests. */

@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "pathe";
 
 /**
- * `blume audit` end-to-end as a subprocess.
+ * `bedocs audit` end-to-end as a subprocess.
  *
  * The fixture writes the `dist/` tree by hand rather than running a real Astro
  * build: the audit only ever reads built HTML plus the route manifest, so a
@@ -263,7 +263,7 @@ describe("bedocs audit", () => {
     });
     const { exitCode, stderr } = await audit(root);
     expect(exitCode).toBe(1);
-    expect(stderr).toContain("Run `blume build` first");
+    expect(stderr).toContain("Run `bedocs build` first");
   });
 
   it("hands the full report to Claude Code with --claude", async () => {

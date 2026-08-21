@@ -8,7 +8,7 @@ import FeatureTerminal from "./FeatureTerminal.astro";
 
 const features = [
   {
-    body: "`blume init` asks a few questions and scaffolds a complete project — content folder, config, and scripts. No starter repo to clone, nothing to keep in sync with upstream.",
+    body: "`bedocs init` asks a few questions and scaffolds a complete project — content folder, config, and scripts. No starter repo to clone, nothing to keep in sync with upstream.",
     checklist: [
       "Interactive by default, `--yes` in CI",
       "Four templates: docs, api, sdk, and changelog",
@@ -54,9 +54,9 @@ const features = [
   {
     body: "The registry and the escape hatch cut both ways: `add` pulls a component's source into your project to make it yours, and `eject` promotes the entire runtime into a standalone Astro app you own outright.",
     checklist: [
-      "`blume add` installs source components",
-      "`blume sync` re-fetches remote content sources",
-      "`blume eject` hands you a plain Astro project",
+      "`bedocs add` installs source components",
+      "`bedocs sync` re-fetches remote content sources",
+      "`bedocs eject` hands you a plain Astro project",
     ],
     icon: icons.eject,
     kind: "eject",
@@ -73,7 +73,7 @@ const commandsScript = `(()=>{const r=document.querySelector("[data-blume-cli]")
 <!-- One sticky terminal whose transcript morphs per command (x.ai/cli-style) -->
 <section data-blume-cli>
   <div class="mx-auto max-w-2xl text-center">
-    <h2 class="font-medium text-3xl tracking-tight sm:text-4xl">
+    <h2 class="font-medium text-3xl sm:text-4xl">
       The whole workflow, built in.
     </h2>
     <p class="mx-auto mt-4 max-w-lg text-balance text-muted-foreground">
@@ -109,7 +109,7 @@ const commandsScript = `(()=>{const r=document.querySelector("[data-blume-cli]")
                   set:html={feature.icon}
                 />
               </span>
-              <h3 class="mt-5 font-medium text-foreground text-xl tracking-tight sm:text-2xl">
+              <h3 class="mt-5 font-medium text-foreground text-xl sm:text-2xl">
                 {feature.title}
               </h3>
               <p

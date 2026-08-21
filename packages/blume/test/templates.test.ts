@@ -28,6 +28,7 @@ import {
   mixedbreadSearchEndpointTemplate,
   notFoundPageTemplate,
   ogEndpointTemplate,
+  playgroundProxyTemplate,
   rawMarkdownEndpointTemplate,
   rssEndpointTemplate,
   runtimeDependencies,
@@ -39,6 +40,7 @@ import {
   stagedContentDir,
   staticJsonEndpointTemplate,
 } from "../src/astro/templates.ts";
+import type { BlumeConfig } from "../src/core/config-input.ts";
 import { blumeConfigSchema } from "../src/core/schema.ts";
 import type { ProjectContext } from "../src/core/types.ts";
 
@@ -65,10 +67,10 @@ const context = (over: Partial<ProjectContext> = {}): ProjectContext => ({
 
 // A parsed config whose `ai.ask` block is always present, so resolveAskBackend
 // receives a fully-resolved (schema-defaulted) backend config.
-const askConfig = (ask: Record<string, unknown>) =>
+const askConfig = (ask: NonNullable<BlumeConfig["ai"]>["ask"]) =>
   blumeConfigSchema.parse({ ai: { ask } }).ai.ask;
 
-const withProvider = (search: Record<string, unknown>) =>
+const withProvider = (search: BlumeConfig["search"]) =>
   blumeConfigSchema.parse({ search });
 
 const island = (over: Partial<IslandSpec> = {}): IslandSpec => ({
@@ -378,6 +380,24 @@ describe("changelogIndexTemplate", () => {
     expect(out).toContain("const canonical = base ? base + basedRoute : null;");
   });
 
+  it("wires the generated OG card, gated on og.enabled", () => {
+    const out = changelogIndexTemplate({ ...exportOpts, staged: false });
+    expect(out).toContain(
+      'const ogPath = data.config.og.enabled ? withBase("/og/changelog.png") : null;'
+    );
+    expect(out).toContain("ogImage={ogImage}");
+    expect(out).toContain("ogGenerated={Boolean(ogImage)}");
+    expect(out).not.toContain("ogImage={null}");
+  });
+
+  it("leaves the site-title suffix to the layout", () => {
+    // Prefixing config.title here doubled the brand in the document title
+    // ("Acme Changelog - Acme").
+    const out = changelogIndexTemplate({ ...exportOpts, staged: false });
+    expect(out).toContain("const pageTitle = changelogTitle;");
+    expect(out).not.toContain('data.config.title + " " + changelogTitle');
+  });
+
   it("links each timeline heading to its own generated page", () => {
     const out = changelogIndexTemplate({ ...exportOpts, staged: false });
     // Route lookup keyed by the collection entry id (matches the manifest).
@@ -410,6 +430,8 @@ describe("changelogIndexTemplate", () => {
     // and the TOC slugs stay in agreement.
     expect(out.indexOf("const headings")).toBeGreaterThan(end);
     // Run the generated dedupe pass to pin its behavior.
+    // SAFETY: the generated snippet sliced above maps heading items to their
+    // deduplicated id strings — the exact signature asserted below.
     // oxlint-disable-next-line no-new-func -- evaluating our own generated output
     const dedupe = new Function(
       "items",
@@ -447,9 +469,7 @@ describe("changelogIndexTemplate", () => {
     expect(out).toContain(
       'data.ui.changelog?.description ??\n  "Product updates, new features, and fixes from every release.";'
     );
-    expect(out).toContain(
-      'const pageTitle = data.config.title + " " + changelogTitle;'
-    );
+    expect(out).toContain("const pageTitle = changelogTitle;");
     expect(out).toContain("<h1>{changelogTitle}</h1>");
     expect(out).toContain("description: changelogDescription,");
     expect(out).not.toContain("<h1>Changelog</h1>");
@@ -663,14 +683,19 @@ describe("astroConfigTemplate", () => {
     );
     expect(out).toContain("prerenderDepsPlugin()");
     expect(out).toContain("serverAppResolvePlugin()");
+    // The client router's in-place swaps read from the prefetch cache, so
+    // every link prefetches on hover/viewport to hide the request latency
+    // behind user intent.
+    expect(out).toContain("prefetch: { prefetchAll: true },");
     // Both lazy client-side deps are pre-bundled through the `blume` package so
     // their CJS/UMD entries get ESM interop in dev; the nested form is required
     // because neither is a direct dep of the generated project, and
     // epub-gen-memory names the `/bundle` subpath it actually imports — the
-    // package root would leave that entry unoptimized. See the optimizeDeps
-    // comment.
+    // package root would leave that entry unoptimized. Astro's client-router
+    // virtual modules must stay OUT of this list: pre-bundling strips the
+    // `define`-injected constants they read. See the optimizeDeps comment.
     expect(out).toContain(
-      'include: ["blume > mermaid","blume > epub-gen-memory/bundle"]'
+      'include: ["bedocs > mermaid","bedocs > epub-gen-memory/bundle"]'
     );
     // Without a pages dir or aliases, the optimizer scan still covers the
     // convention islands dir so their deps land in the initial optimization.
@@ -1085,7 +1110,7 @@ describe("astroConfigTemplate", () => {
   });
 
   it("keeps an isolated build's Vercel output inside the relocated runtime", () => {
-    // `blume build --isolated` relocates the runtime and its dist; the adapter
+    // `bedocs build --isolated` relocates the runtime and its dist; the adapter
     // root must follow, so a verify build never overwrites the real
     // `<root>/.vercel/output`.
     const out = astroConfigTemplate({
@@ -1360,6 +1385,52 @@ describe("askEndpointTemplate", () => {
     expect(out).toContain('baseURL: "https://api.example.com/v1"');
     expect(out).toContain('provider("m")');
   });
+
+  it("threads custom instructions into the grounded route and its fallback", () => {
+    const out = askEndpointTemplate(resolveAskBackend(), true, {
+      instructions: "Answer in French.",
+    });
+    expect(out).toContain(
+      'createAskContext(askData, { instructions: "Answer in French." })'
+    );
+    expect(out).toContain(
+      "Answer using the project's documentation.\\n\\nAnswer in French."
+    );
+  });
+
+  it("threads the configured retrieval sizes into the grounded route", () => {
+    const out = askEndpointTemplate(resolveAskBackend(), true, {
+      retrieval: { contextBudget: 2500, excerptChars: 1200, maxResults: 3 },
+    });
+    expect(out).toContain(
+      'createAskContext(askData, { retrieval: {"contextBudget":2500,"excerptChars":1200,"maxResults":3} })'
+    );
+  });
+
+  it("carries instructions and retrieval together", () => {
+    const out = askEndpointTemplate(resolveAskBackend(), true, {
+      instructions: "Answer in French.",
+      retrieval: { contextBudget: 2500 },
+    });
+    expect(out).toContain('instructions: "Answer in French."');
+    expect(out).toContain('retrieval: {"contextBudget":2500}');
+  });
+
+  it("appends custom instructions to the ungrounded prompt", () => {
+    const out = askEndpointTemplate(resolveAskBackend(), false, {
+      instructions: "Answer in French.",
+    });
+    expect(out).not.toContain("createAskContext");
+    expect(out).toContain(
+      "Answer using the project's documentation.\\n\\nAnswer in French."
+    );
+  });
+
+  it("keeps the plain prompt when no instructions are configured", () => {
+    const out = askEndpointTemplate(resolveAskBackend(), true);
+    expect(out).toContain("createAskContext(askData);");
+    expect(out).toContain("Answer using the project's documentation.\"");
+  });
 });
 
 describe("searchClientTemplate", () => {
@@ -1496,7 +1567,7 @@ describe("mcp templates", () => {
 
   it("asserts the snapshot back to McpData at the JSON boundary", () => {
     // JSON imports widen literal kinds (e.g. NavNode's "page") to string, so
-    // the endpoint must cast or `blume check` fails on the generated file.
+    // the endpoint must cast or `bedocs check` fails on the generated file.
     const out = mcpEndpointTemplate("/mcp");
     expect(out).toContain(
       'import type { McpData } from "blume/ai/mcp/data.ts"'
@@ -1508,6 +1579,30 @@ describe("mcp templates", () => {
     const out = staticJsonEndpointTemplate({ ok: true });
     expect(out).toContain("export const prerender = true;");
     expect(out).toContain('"ok": true');
+  });
+});
+
+describe("playgroundProxyTemplate", () => {
+  it("wraps the shipped proxy handler in a server-rendered ALL endpoint", () => {
+    const out = playgroundProxyTemplate(["https://api.example"]);
+    expect(out).toContain("export const prerender = false;");
+    expect(out).toContain(
+      'import { createPlaygroundProxyHandler } from "blume/openapi/proxy.ts"'
+    );
+    expect(out).toContain(
+      "export const ALL: APIRoute = ({ request }) => handler(request);"
+    );
+  });
+
+  it("bakes the documented origins in as the handler's allowlist", () => {
+    // The trust boundary: the target arrives as a query parameter, so the
+    // allowlist must be part of the generated source, not request data.
+    expect(playgroundProxyTemplate(["https://api.example"])).toContain(
+      'createPlaygroundProxyHandler(["https://api.example"])'
+    );
+    expect(playgroundProxyTemplate([])).toContain(
+      "createPlaygroundProxyHandler([])"
+    );
   });
 });
 
@@ -1547,7 +1642,7 @@ describe("static endpoint templates", () => {
     // the resolved og value, not the raw site description.
     expect(endpoint).toContain("description: data.config.og.description");
     // An unannotated `const customRoutes = []` is an implicit any[] under a
-    // strict tsconfig, failing `blume check` on the generated file (#91).
+    // strict tsconfig, failing `bedocs check` on the generated file (#91).
     expect(endpoint).toContain(
       "const customRoutes: { slug: string; title: string }[] = []"
     );
@@ -1558,6 +1653,16 @@ describe("static endpoint templates", () => {
       "const families: OgFontFamilies | undefined = undefined"
     );
     expect(endpoint).not.toContain("data.config.og.fonts");
+  });
+
+  it("adds the changelog index card only when the index is generated", () => {
+    const withIndex = ogEndpointTemplate([], {}, true);
+    expect(withIndex).toContain(
+      'add("changelog", data.ui.changelog?.title ?? "Changelog");'
+    );
+    // Without the generated index there is no /changelog page to card.
+    expect(ogEndpointTemplate()).not.toContain('add("changelog"');
+    expect(ogEndpointTemplate([], {}, false)).not.toContain('add("changelog"');
   });
 
   it("bakes resolved fonts and role families into the OG endpoint", () => {
@@ -1666,6 +1771,9 @@ describe("contentAssetsEndpointTemplate", () => {
   });
 
   it("guards staged lookups against path traversal", () => {
-    expect(out).toContain('abs.startsWith(STAGED_DIR + "/")');
+    // The separator-safe spelling: a prefix test against the forward-slash
+    // STAGED_DIR broke on Windows, where resolve() answers with backslashes.
+    expect(out).toContain("const rel = relative(STAGED_DIR, abs);");
+    expect(out).toContain('rel === "" || rel.startsWith("..") || isAbsolute');
   });
 });

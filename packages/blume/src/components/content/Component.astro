@@ -165,12 +165,16 @@ const paneClass = "motion-safe:transition-[height] motion-safe:duration-200";
 
   // A pane capped by a small viewport would otherwise stay small after the
   // window grows: the frame's content stopped changing size, so its observer
-  // has nothing new to report.
-  window.addEventListener("resize", () => {
-    for (const frame of document.querySelectorAll<HTMLIFrameElement>(
-      "iframe[data-blume-example-frame][data-blume-reported-height]"
-    )) {
-      applyMeasuredHeight(frame);
-    }
-  });
+  // has nothing new to report. rAF-coalesced so a live resize drag runs the
+  // read-then-write pass once per frame, not once per event.
+  window.addEventListener(
+    "resize",
+    rafThrottle(() => {
+      for (const frame of document.querySelectorAll<HTMLIFrameElement>(
+        "iframe[data-blume-example-frame][data-blume-reported-height]"
+      )) {
+        applyMeasuredHeight(frame);
+      }
+    })
+  );
 </script>

@@ -1,5 +1,5 @@
 ---
-import PageLayout from "blume/components/layout/PageLayout.astro";
+import PageLayout from "@beands/bedocs/components/layout/PageLayout.astro";
 import data from "blume:data";
 import Audit from "./_cli/Audit.astro";
 import CommandIndex from "./_cli/CommandIndex.astro";
@@ -13,7 +13,7 @@ import { installCopyScript } from "./_home/shared.ts";
 
 // The CLI landing page: the homepage's structure and styling with the story
 // retold around the command line — a hero, the sticky-terminal parallax scroll
-// (x.ai/cli-style), the `blume audit`/`eval`/`translate` spotlights, and the
+// (x.ai/cli-style), the `bedocs audit`/`eval`/`translate` spotlights, and the
 // command index.
 // PageLayout supplies the document shell, header, theme, and fonts, and — with
 // siteUrl + ogEnabled — this page's canonical and generated OG card.
@@ -35,6 +35,7 @@ const pageDescription =
   searchEnabled={config.search.enabled}
   site={{ description: config.description, title: config.title }}
   siteUrl={config.site}
+  structuredDataEnabled={config.structuredData}
   themeMode={config.theme.mode}
   x={config.x}
 >

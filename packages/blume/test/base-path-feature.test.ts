@@ -8,6 +8,7 @@ import { buildLlmsFiles } from "../src/ai/llms.ts";
 import {
   isInternalPath,
   normalizeBasePath,
+  normalizeRoute,
   stripBasePath,
   withBasePath,
   withComposedBasePath,
@@ -16,7 +17,7 @@ import { validateLinks } from "../src/core/links.ts";
 import { scanProject } from "../src/core/project-graph.ts";
 import { pageMetaSchema } from "../src/core/schema.ts";
 import type { ContentGraph, PageLink, PageRecord } from "../src/core/types.ts";
-import { buildSitemap } from "../src/deploy/sitemap.ts";
+import { buildSitemapFiles } from "../src/deploy/sitemap.ts";
 import {
   blumeMarkdownProcessor,
   blumeMdxProcessor,
@@ -35,6 +36,17 @@ describe("normalizeBasePath", () => {
     expect(normalizeBasePath("/docs/")).toBe("/docs");
     expect(normalizeBasePath("  /docs  ")).toBe("/docs");
     expect(normalizeBasePath("//a//b//")).toBe("/a/b");
+  });
+});
+
+describe("normalizeRoute", () => {
+  it("canonicalizes to / or /seg with one leading slash", () => {
+    expect(normalizeRoute("")).toBe("/");
+    expect(normalizeRoute("/")).toBe("/");
+    expect(normalizeRoute("///")).toBe("/");
+    expect(normalizeRoute("docs")).toBe("/docs");
+    expect(normalizeRoute("/docs/")).toBe("/docs");
+    expect(normalizeRoute("  api/events  ")).toBe("/api/events");
   });
 });
 
@@ -187,9 +199,7 @@ describe("markdown base-links plugin", () => {
     expect(plain).toContain('href="/guides/intro"');
 
     const mdx = await renderMd(
-      blumeMdxProcessor({ basePath: "/docs" }) as unknown as ReturnType<
-        typeof blumeMarkdownProcessor
-      >,
+      blumeMdxProcessor({ basePath: "/docs" }),
       "[Guide](/guides/intro)"
     );
     expect(mdx).toContain('href="/docs/guides/intro"');
@@ -221,7 +231,7 @@ afterAll(async () => {
   );
 });
 
-const FIXTURE: Record<string, string> = {
+const FIXTURE = {
   "blume.config.ts":
     'export default { basePath: "/manual", deployment: { site: "https://example.com" } };\n',
   "docs/getting-started.md": "# Getting started\n",
@@ -266,7 +276,7 @@ describe("content pipeline under basePath", () => {
       mode: "build",
     });
 
-    const sitemap = buildSitemap(project);
+    const sitemap = buildSitemapFiles(project)?.[0]?.xml ?? "";
     expect(sitemap).toContain("https://example.com/manual/getting-started");
 
     const { index, full } = await buildLlmsFiles(project);
@@ -301,16 +311,18 @@ const makePage = (
   sourcePath: `/abs/${navPath}.mdx`,
   title: route,
   translationKey: navPath,
+  version: "",
+  versionKey: navPath,
 });
 
-const makeGraph = (pages: PageRecord[]): ContentGraph =>
-  ({
-    diagnostics: [],
-    navigation: { featured: [], selectors: [], sidebar: [], tabs: [] },
-    navigationByLocale: {},
-    pages,
-    routes: new Map(pages.map((page) => [page.route, page.id])),
-  }) as ContentGraph;
+const makeGraph = (pages: PageRecord[]): ContentGraph => ({
+  diagnostics: [],
+  navigation: { featured: [], selectors: [], sidebar: [], tabs: [] },
+  navigationByLocale: {},
+  navigationByVersion: {},
+  pages,
+  routes: new Map(pages.map((page) => [page.route, page.id])),
+});
 
 describe("validateLinks under basePath", () => {
   it("resolves author-written root-relative links against the based routes", async () => {

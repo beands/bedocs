@@ -5,6 +5,8 @@ import { extractComponentTags } from "../src/core/sources/normalize.ts";
 import type { PageRecord } from "../src/core/types.ts";
 
 const page = (over: Partial<PageRecord>): PageRecord =>
+  // SAFETY: the validators under test read only the fields a fixture sets
+  // (id, route, and the overrides); the remaining PageRecord fields go unread.
   ({ id: "p", route: "/p", ...over }) as PageRecord;
 
 describe("extractComponentTags", () => {
@@ -44,7 +46,7 @@ describe("validateUsedComponents", () => {
     expect(result[0]?.message).toContain("Bogus");
   });
 
-  it("suggests `blume add` when the tag matches a registry item", () => {
+  it("suggests `bedocs add` when the tag matches a registry item", () => {
     // A layout registry item (`Pagination`) isn't a globally-available built-in.
     const result = validateUsedComponents(
       [page({ componentsUsed: ["Pagination"] })],

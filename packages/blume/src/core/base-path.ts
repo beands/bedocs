@@ -12,6 +12,8 @@
  * `components/islands/base-path.ts` and serves `deployment.base` via `BASE_URL`.
  */
 
+import { trimEnd } from "./trim.ts";
+
 /**
  * Canonicalize a configured base path to either `""` (none) or `/seg[/seg…]`
  * (leading slash, no trailing slash, collapsed inner slashes). A blank value or
@@ -33,8 +35,23 @@ export const normalizeBasePath = (input?: string): string => {
  * `/docs` and `/docs/` as the same page) and collapse an empty path to `/`.
  */
 export const normalizePath = (path: string): string => {
-  const trimmed = path.replace(/\/+$/u, "");
+  const trimmed = trimEnd(path, "/");
   return trimmed === "" ? "/" : trimmed;
+};
+
+/**
+ * Canonicalize a route-ish string (a configured route, a page path, an agent-
+ * supplied route) to `/` or `/seg[/seg…]`: trimmed, exactly one leading slash,
+ * no trailing slash. The shared spelling of what openapi/references,
+ * ai/ask-context, and ai/mcp/server each hand-rolled with slightly different
+ * regexes.
+ */
+export const normalizeRoute = (input: string): string => {
+  const trimmed = trimEnd(input.trim(), "/");
+  if (trimmed === "") {
+    return "/";
+  }
+  return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 };
 
 /**

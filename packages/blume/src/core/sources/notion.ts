@@ -1,5 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
+import pLimit from "p-limit";
 import { join } from "pathe";
 
 import { BlumeError } from "../diagnostics.ts";
@@ -46,11 +47,21 @@ interface NotionPage {
   last_edited_time?: string;
 }
 
+/** The per-type payload a block carries under the key matching its `type`. */
+interface NotionBlockPayload {
+  caption?: NotionRichText[];
+  checked?: boolean;
+  external?: { url: string };
+  file?: { url: string };
+  language?: string;
+  rich_text?: NotionRichText[];
+}
+
 interface NotionBlock {
   id: string;
   type: string;
   has_children?: boolean;
-  [key: string]: unknown;
+  [key: string]: NotionBlockPayload | boolean | string | undefined;
 }
 
 interface NotionList<T> {
@@ -96,6 +107,12 @@ export interface NotionSourceOptions {
   prefix?: string;
   /** The Notion database id. */
   database: string;
+  /**
+   * Maximum concurrent Notion API requests. Notion allows an average of 3
+   * requests per second per integration, so a large database must pace its
+   * block-tree fan-out or every request 429s. Default 3.
+   */
+  concurrency?: number;
   /** Integration token; defaults to `NOTION_TOKEN`. */
   token?: string;
   properties?: NotionPropertyMap;
@@ -111,6 +128,17 @@ export interface NotionSourceOptions {
   client?: NotionClientLike;
   /** Injected for tests; used to download images. */
   fetchImpl?: typeof fetch;
+}
+
+/** The frontmatter Blume derives from a Notion page's properties. */
+interface NotionFrontmatter {
+  description?: string;
+  draft?: boolean;
+  sidebar?: { order: number };
+  title?: string;
+  // Frontmatter stays an open bag downstream (`SourceEntry.data`), so admit
+  // the value shapes this source writes under any future key.
+  [key: string]: boolean | string | { order: number } | undefined;
 }
 
 const richToMarkdown = (rich: NotionRichText[] = []): string =>
@@ -133,20 +161,32 @@ const richToMarkdown = (rich: NotionRichText[] = []): string =>
     })
     .join("");
 
+const isBlockPayload = (
+  value: NotionBlockPayload | boolean | string | undefined
+): value is NotionBlockPayload => typeof value === "object";
+
+/** The payload object stored under a block's own `type` key, if present. */
+const payloadOf = (block: NotionBlock): NotionBlockPayload | undefined => {
+  const value = block[block.type];
+  return isBlockPayload(value) ? value : undefined;
+};
+
 const blockField = (block: NotionBlock): NotionRichText[] =>
-  ((block[block.type] as { rich_text?: NotionRichText[] })?.rich_text ??
-    []) as NotionRichText[];
+  payloadOf(block)?.rich_text ?? [];
 
 const RATE_LIMITED = 429;
 const MAX_RETRIES = 4;
 const BASE_DELAY_MS = 500;
 const SECOND_MS = 1000;
+const DEFAULT_CONCURRENCY = 3;
 
 /**
  * Retry a Notion API call on a `429 rate_limited`, honoring the `Retry-After`
  * header and otherwise backing off exponentially. A large workspace fans out
  * many concurrent block-children requests, so without this a single 429 would
- * reject the batch and abort the whole import.
+ * reject the batch and abort the whole import. The exponential wait is
+ * jittered so calls rate-limited together don't retry in lockstep and trip
+ * the limit again as a herd.
  */
 const withNotionRetry = async <T>(
   call: () => Promise<T>,
@@ -155,15 +195,23 @@ const withNotionRetry = async <T>(
   try {
     return await call();
   } catch (error) {
+    // SAFETY: Notion SDK failures are APIResponseError-shaped, carrying the
+    // failed request's HTTP status; anything else reads `undefined` and is
+    // rethrown below.
     const { status } = error as { status?: number };
     if (status !== RATE_LIMITED || attempt === MAX_RETRIES) {
       throw error;
     }
+    // SAFETY: same APIResponseError shape — `headers` maps lower-cased HTTP
+    // header names to their values; a missing header yields `NaN` and falls
+    // back to exponential backoff.
     const retryAfter = Number(
       (error as { headers?: Record<string, string> }).headers?.["retry-after"]
     );
     const wait =
-      retryAfter > 0 ? retryAfter * SECOND_MS : BASE_DELAY_MS * 2 ** attempt;
+      retryAfter > 0
+        ? retryAfter * SECOND_MS
+        : BASE_DELAY_MS * 2 ** attempt * (1 + Math.random());
     await sleep(wait);
     return withNotionRetry(call, attempt + 1);
   }
@@ -194,7 +242,7 @@ const isListItem = (block: NotionBlock | undefined): boolean =>
 
 /** Render a leaf (non-container) block to Markdown, or null for containers. */
 const renderLeaf = (block: NotionBlock): string | null => {
-  const data = (block[block.type] ?? {}) as Record<string, unknown>;
+  const data = payloadOf(block) ?? {};
   const text = richToMarkdown(blockField(block));
   switch (block.type) {
     case "paragraph": {
@@ -225,16 +273,11 @@ const renderLeaf = (block: NotionBlock): string | null => {
       return "---";
     }
     case "code": {
-      return `\`\`\`${(data.language as string) ?? ""}\n${text}\n\`\`\``;
+      return `\`\`\`${data.language ?? ""}\n${text}\n\`\`\``;
     }
     case "image": {
-      const media = data as {
-        external?: { url: string };
-        file?: { url: string };
-        caption?: NotionRichText[];
-      };
-      const url = media.external?.url ?? media.file?.url;
-      return url ? `![${richToMarkdown(media.caption)}](${url})` : "";
+      const url = data.external?.url ?? data.file?.url;
+      return url ? `![${richToMarkdown(data.caption)}](${url})` : "";
     }
     default: {
       return null;
@@ -252,6 +295,16 @@ export const notionSource = (
   ctx?: SourceContext
 ): ContentSource => {
   const props = options.properties ?? {};
+  // A FIFO semaphore: at most N calls run at once, the rest queue. Notion's
+  // rate limit is per-integration (an average of 3 req/s), and a large
+  // database fans out one block-children request per page plus one per nested
+  // container — an unbounded burst guarantees 429s that even the retry loop
+  // can't recover from, so every API call funnels through this limiter.
+  const limit = pLimit(Math.max(1, options.concurrency ?? DEFAULT_CONCURRENCY));
+  // Every Notion API call goes through the limiter, inside the retry — so a
+  // call sleeping through a backoff doesn't hold a slot while it waits.
+  const notionCall = <T>(call: () => Promise<T>): Promise<T> =>
+    withNotionRetry(() => limit(call));
   const cache = snapshotCache(
     ctx?.cacheDir ?? join(".bedocs", "cache", options.name)
   );
@@ -266,6 +319,9 @@ export const notionSource = (
     }
     let Client: new (config: { auth?: string }) => NotionClientLike;
     try {
+      // SAFETY: `@notionhq/client` exports a `Client` class constructable with
+      // an `auth` token whose instances cover the NotionClientLike slice; the
+      // local type keeps the SDK mockable without importing its types.
       ({ Client } = (await import("@notionhq/client")) as {
         Client: new (config: { auth?: string }) => NotionClientLike;
       });
@@ -284,7 +340,7 @@ export const notionSource = (
     blockId: string
   ): Promise<NotionBlock[]> =>
     collectAll((cursor) =>
-      withNotionRetry(() =>
+      notionCall(() =>
         client.blocks.children.list({ block_id: blockId, start_cursor: cursor })
       )
     );
@@ -399,13 +455,11 @@ export const notionSource = (
 
   const orderOf = (page: NotionPage): number | undefined => {
     const order = page.properties[props.order ?? "Order"]?.number;
-    return typeof order === "number" ? order : undefined;
+    return order === null ? undefined : order;
   };
 
-  const frontmatter = (
-    page: NotionPage
-  ): { data: Record<string, unknown>; slug: string } => {
-    const data: Record<string, unknown> = {};
+  const frontmatter = (page: NotionPage) => {
+    const data: NotionFrontmatter = {};
     const title = richToMarkdown(titleProperty(page)?.title);
     if (title) {
       data.title = title;
@@ -458,12 +512,12 @@ export const notionSource = (
   };
 
   // Hoisted out of `load` so the retry closure doesn't nest past the linter's
-  // 4-level limit (source factory → queryDatabase → withNotionRetry callback).
+  // 4-level limit (source factory → queryDatabase → notionCall callback).
   const queryDatabase = (
     client: NotionClientLike,
     cursor?: string
   ): Promise<NotionList<NotionPage>> =>
-    withNotionRetry(() =>
+    notionCall(() =>
       client.databases.query({
         database_id: options.database,
         start_cursor: cursor,

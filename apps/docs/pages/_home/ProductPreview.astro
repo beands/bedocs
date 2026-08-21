@@ -4,9 +4,9 @@
 // it sits into (padded top/left/right, flush bottom). The code block is the
 // real shipped <CodeBlock>, so it gets genuine Shiki highlighting, a language
 // icon, and the filename header exactly as a Markdown fence would.
-import CodeBlock from "blume/components/content/CodeBlock.astro";
-import Callout from "blume/components/content/Callout.astro";
-import { GITHUB_MARK } from "blume/components/github-mark.ts";
+import CodeBlock from "@beands/bedocs/components/content/CodeBlock.astro";
+import Callout from "@beands/bedocs/components/content/Callout.astro";
+import { GITHUB_MARK } from "@beands/bedocs/components/github-mark.ts";
 import CopyGlyph from "./CopyGlyph.astro";
 import { icons, sampleBrand } from "./shared.ts";
 
@@ -83,7 +83,7 @@ const webhookCode = `app.post("/webhooks/comet", (req, res) => {
     >
       <!-- App header -->
       <div
-        class="flex items-center justify-between border-border border-b px-5 py-3"
+        class="flex items-center justify-between px-5 py-3"
       >
         <div class="flex items-center gap-6">
           <span
@@ -110,6 +110,35 @@ const webhookCode = `app.post("/webhooks/comet", (req, res) => {
         </div>
         <div class="flex items-center gap-2">
           <span
+            class="hidden items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-[13px] text-muted-foreground lg:flex"
+          >
+            <svg
+              class="size-4"
+              fill="none"
+              height="16"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="16"
+              set:html={icons.globe}
+            ></svg>
+            English
+            <svg
+              class="size-3.5"
+              fill="none"
+              height="14"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="14"
+              set:html={icons.chevronDown}
+            ></svg>
+          </span>
+          <span
             class="hidden items-center gap-2 rounded-full border border-border px-3 py-1.5 text-[13px] text-muted-foreground sm:flex"
           >
             <svg
@@ -125,9 +154,7 @@ const webhookCode = `app.post("/webhooks/comet", (req, res) => {
               set:html={icons.search}
             ></svg>
             Search
-            <span class="ml-2 rounded border border-border px-1 font-mono"
-              >⌘K</span
-            >
+            <span class="ml-2 font-mono">⌘K</span>
           </span>
           <span
             aria-hidden="true"
@@ -177,7 +204,7 @@ const webhookCode = `app.post("/webhooks/comet", (req, res) => {
       <div
         class="grid min-h-[360px] grid-cols-1 sm:min-h-[560px] sm:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr_200px]"
       >
-        <aside class="hidden border-border border-r p-5 text-[13px] sm:block">
+        <aside class="hidden p-5 text-[13px] sm:block">
           {
             sidebar.map((group) => (
               <div class="mb-5 last:mb-0">
@@ -195,7 +222,7 @@ const webhookCode = `app.post("/webhooks/comet", (req, res) => {
         </aside>
         <div class="mx-auto max-w-full p-6 sm:max-w-2xl sm:p-8">
           <div
-            class="font-medium text-2xl text-foreground leading-[1.1] tracking-tight sm:text-4xl"
+            class="font-medium text-2xl text-foreground leading-[1.1] tracking-tighter sm:text-4xl"
           >
             Quickstart
           </div>
@@ -210,7 +237,7 @@ const webhookCode = `app.post("/webhooks/comet", (req, res) => {
           </Callout>
 
           <div
-            class="mt-10 font-medium text-foreground text-xl tracking-tight"
+            class="mt-10 font-medium text-foreground text-xl tracking-tighter"
           >
             Install the SDK
           </div>
@@ -224,7 +251,7 @@ const webhookCode = `app.post("/webhooks/comet", (req, res) => {
           </div>
 
           <div
-            class="mt-10 font-medium text-foreground text-xl tracking-tight"
+            class="mt-10 font-medium text-foreground text-xl tracking-tighter"
           >
             Send a message
           </div>
@@ -240,7 +267,7 @@ const webhookCode = `app.post("/webhooks/comet", (req, res) => {
           </div>
 
           <div
-            class="mt-8 font-medium text-[15px] text-foreground tracking-tight"
+            class="mt-8 font-medium text-[15px] text-foreground tracking-tighter"
           >
             Use a template
           </div>
@@ -250,7 +277,7 @@ const webhookCode = `app.post("/webhooks/comet", (req, res) => {
           </p>
 
           <div
-            class="mt-10 font-medium text-foreground text-xl tracking-tight"
+            class="mt-10 font-medium text-foreground text-xl tracking-tighter"
           >
             Track delivery
           </div>
@@ -260,7 +287,7 @@ const webhookCode = `app.post("/webhooks/comet", (req, res) => {
           </p>
 
           <div
-            class="mt-8 font-medium text-[15px] text-foreground tracking-tight"
+            class="mt-8 font-medium text-[15px] text-foreground tracking-tighter"
           >
             Handle webhooks
           </div>
@@ -274,7 +301,7 @@ const webhookCode = `app.post("/webhooks/comet", (req, res) => {
           </div>
 
           <div
-            class="mt-10 font-medium text-foreground text-xl tracking-tight"
+            class="mt-10 font-medium text-foreground text-xl tracking-tighter"
           >
             Next steps
           </div>
@@ -289,9 +316,7 @@ const webhookCode = `app.post("/webhooks/comet", (req, res) => {
             }
           </div>
         </div>
-        <aside
-          class="hidden border-border border-l p-5 text-[13px] lg:block"
-        >
+        <aside class="hidden p-5 text-[13px] lg:block">
           <p class="font-medium text-foreground">On this page</p>
           <ul class="mt-3 space-y-2.5 text-muted-foreground">
             {

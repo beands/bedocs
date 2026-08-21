@@ -25,10 +25,10 @@ import {
   TranslateRun,
 } from "@/scenes/translate-terminal";
 
-// The `blume translate` launch video (1.4). Same visual system as the audit
+// The `bedocs translate` launch video (1.4). Same visual system as the audit
 // and eval cuts — gradient photo backdrop, frosted cards, Geist — but opening
 // cold on the title itself rattling through the locales. Declare them once,
-// and `blume translate` fills them in.
+// and `bedocs translate` fills them in.
 
 const { fontFamily: GEIST_SANS } = loadGeistSans("normal", {
   subsets: ["latin"],
@@ -234,7 +234,7 @@ const SceneSolution = () => (
 const SceneConfig = () => <TranslateConfig />;
 
 // ─── Scene 4 · The run ──────────────────────────────────────────────────────
-// The same frosted card, now a terminal: `blume translate` fills every locale.
+// The same frosted card, now a terminal: `bedocs translate` fills every locale.
 const SceneRun = () => <TranslateRun />;
 
 // ─── Scene 5 · The craft ────────────────────────────────────────────────────
@@ -360,7 +360,7 @@ const SceneCta = () => (
   // to the final frame.
   <Sequence durationInFrames={90} layout="none">
     <Typewriter
-      text="blume translate"
+      text="bedocs translate"
       fontSize={64}
       charsPerSecond={16}
       color={WHITE}
@@ -376,8 +376,9 @@ const SceneCta = () => (
 const SceneLogo = () => <BlumeLogo color={WHITE} wordmarkSize={122} />;
 
 // Wire the shipped Geist faces to the CSS variables every remocn component
-// reads (`var(--font-geist-sans)` / `var(--font-geist-mono)`). Asserted because
-// CSSProperties doesn't type custom `--*` keys in this @types/react version.
+// reads (`var(--font-geist-sans)` / `var(--font-geist-mono)`).
+// SAFETY: the object holds only `--*` custom properties — valid inline style
+// keys that CSSProperties cannot type in this @types/react version.
 const FONT_VARS = {
   "--font-geist-mono": GEIST_MONO,
   "--font-geist-sans": GEIST_SANS,

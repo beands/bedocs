@@ -101,6 +101,14 @@ The **Open in chat** action opens the current page in an AI assistant — v0, Ch
 
 Like Copy as Markdown, it needs no setup. The assistant fetches the page over its public URL, so it works as soon as the page is deployed.
 
+To tailor the action, set `ai.openInChat`. `false` hides it entirely, and an array of provider keys — `"v0"`, `"chatgpt"`, `"claude"`, `"t3"`, `"scira"`, `"cursor"` — shows just those providers, in the order you list them:
+
+```ts blume.config.ts lineNumbers
+ai: {
+  openInChat: ["claude", "chatgpt", "cursor"],
+}
+```
+
 To embed a ready-to-copy prompt inline in your content — rather than a whole-page action — use the [Prompt component](/docs/content/components#prompt), which renders a labeled row with a **Copy prompt** button and an optional open-in-Cursor link.
 
 ## Ask AI
@@ -136,6 +144,22 @@ ai: {
 
 `label` is the question that gets asked; `icon` is optional. Leave `suggestions` unset (or empty) and the panel opens to a plain input.
 
+### Custom instructions
+
+Add your own system-prompt text with `instructions` — identity, language, tone, or anything else the assistant should keep in mind:
+
+```ts blume.config.ts lineNumbers
+ai: {
+  ask: {
+    enabled: true,
+    instructions:
+      "You are Bloomy, the Acme docs assistant. Answer in the language the question was asked in, and keep answers under three paragraphs.",
+  },
+}
+```
+
+Your text is **appended to** the built-in instructions rather than replacing them: the built-in part carries the [grounding](#grounding) contract — answer only from the retrieved pages, cite them as Markdown links — that the chat panel's citations depend on, so it stays intact whatever you add.
+
 ### Grounding
 
 Ask AI is **grounded in your docs**. For each question it retrieves the most relevant pages — using the same lexical [Orama](/docs/configuration/search) index that powers on-page search — and injects them into the model's system prompt, so answers come from your content instead of the model's own knowledge. The assistant is told to answer only from the retrieved pages, to say when something isn't covered, and to cite the pages it drew from.
@@ -143,6 +167,33 @@ Ask AI is **grounded in your docs**. For each question it retrieves the most rel
 The page the reader is currently on is added to the context first and used to scope retrieval to that page's language, so answers stay relevant to where they are in the docs. Retrieval runs at request time from a snapshot baked into the build, so it works regardless of your [search](/docs/configuration/search) provider — even when search is set to `none` — and needs no configuration.
 
 Grounding is on for every backend except **[Inkeep](#backends)**, which runs its own retrieval over the content you've indexed in its dashboard.
+
+### Retrieval size
+
+How much documentation a question carries is the biggest lever on how long the reader waits for the first word: the model reads every injected character before it emits a token. On a hosted frontier model that's invisible, but on a self-hosted backend it dominates. `retrieval` sizes it:
+
+```ts blume.config.ts lineNumbers
+ai: {
+  ask: {
+    enabled: true,
+    retrieval: {
+      maxResults: 3, // fewer pages retrieved per question
+      excerptChars: 1200, // shorter excerpt from each one
+      contextBudget: 3000, // smaller total injection
+    },
+  },
+}
+```
+
+| Option          | Default | Description                                     |
+| --------------- | ------- | ----------------------------------------------- |
+| `maxResults`    | `6`     | Documents retrieved per question.               |
+| `excerptChars`  | `2000`  | Characters kept from each retrieved page.       |
+| `contextBudget` | `10000` | Total injected characters, across all excerpts. |
+
+The three aren't interchangeable. `contextBudget` caps the whole injection, `excerptChars` decides how deep into a single long page its excerpt reaches — raise it when one page holds the whole answer and the excerpt cuts it off — and `maxResults` caps how many pages retrieval adds. The page the reader is viewing is injected on top of the retrieved ones, so an answer can cite up to one page more than `maxResults`.
+
+The defaults suit a hosted model. Lower them when you're serving from your own hardware and time-to-first-token matters more than recall; answers stay grounded either way, and the assistant is told to say when something isn't covered rather than fill the gap.
 
 ### External endpoint
 
@@ -185,15 +236,17 @@ A static build with Ask AI enabled and no external `endpoint` fails fast with a 
 
 By default Ask AI routes through the **Vercel AI Gateway**: `model` is a `provider/model` string, so you switch models by changing it (`openai/gpt-5.5`, `anthropic/claude-sonnet-4-5`, and so on) with no provider SDK to install. The gateway reads `AI_GATEWAY_API_KEY` from your environment and is wired up automatically when you deploy on Vercel.
 
-Set `provider` to point Ask AI somewhere else. Each backend reads its API key from an environment variable, and the matching provider SDK is added to your project's runtime automatically when you build — only the one you use:
+Set `provider` to point Ask AI somewhere else. Each backend reads its API key from an environment variable and streams through a provider SDK you install in your project — only the one you use:
 
-| `provider` | `model` | API key env var |
-| --- | --- | --- |
-| `gateway` (default) | a `provider/model` string via the AI Gateway | `AI_GATEWAY_API_KEY` |
-| `openrouter` | any [OpenRouter](https://openrouter.ai) model | `OPENROUTER_API_KEY` |
-| `llmgateway` | any [LLMGateway](https://llmgateway.io) model | `LLMGATEWAY_API_KEY` |
-| `inkeep` | an [Inkeep](https://inkeep.com) QA model | `INKEEP_API_KEY` |
-| `openai-compatible` | whatever your endpoint serves | set with `apiKeyEnv` |
+| `provider` | `model` | API key env var | SDK to install |
+| --- | --- | --- | --- |
+| `gateway` (default) | a `provider/model` string via the AI Gateway | `AI_GATEWAY_API_KEY` | none — ships with Blume |
+| `openrouter` | any [OpenRouter](https://openrouter.ai) model | `OPENROUTER_API_KEY` | `@openrouter/ai-sdk-provider` |
+| `llmgateway` | any [LLMGateway](https://llmgateway.io) model | `LLMGATEWAY_API_KEY` | `@ai-sdk/openai-compatible` |
+| `inkeep` | an [Inkeep](https://inkeep.com) QA model | `INKEEP_API_KEY` | `@ai-sdk/openai-compatible` |
+| `openai-compatible` | whatever your endpoint serves | set with `apiKeyEnv` | `@ai-sdk/openai-compatible` |
+
+The SDKs are optional peer dependencies, so add the one your backend needs to your project (e.g. `npm install @openrouter/ai-sdk-provider`). If it's missing, the build warns with the exact package name before Vite would fail to resolve the import.
 
 For example, to use OpenRouter:
 
@@ -338,7 +391,21 @@ Link: </agent-readability.json>; rel="describedby"; type="application/json",
   </index.md>; rel="alternate"; type="text/markdown"
 ```
 
-Each entry appears only when its feature is on. The `alternate` link points at the homepage's Markdown mirror — the page's own [raw Markdown](#raw-markdown) when the home route is a content page, or the synthesized `llms.txt` fallback when it's a landing page. Sites that publish APIs also get a `rel="api-catalog"` entry pointing at the [generated API catalog](#api-catalog). The header rides on every surface Blume controls: the dev server (check it with `curl -I localhost:4321`), static builds via the emitted `_headers` file (Netlify and Cloudflare), and Vercel server builds via the deploy's routing rules. Hosts that ignore `_headers` on static output (GitHub Pages, S3) can't send custom response headers at all — there, agents still find everything through `llms.txt` and `agent-readability.json` at the site root.
+Each entry appears only when its feature is on. The `alternate` link points at the homepage's Markdown mirror — the page's own [raw Markdown](#raw-markdown) when the home route is a content page, or the synthesized `llms.txt` fallback when it's a landing page. Sites that publish APIs also get a `rel="api-catalog"` entry pointing at the [generated API catalog](#api-catalog). The header rides on every surface Blume controls: the dev server (check it with `curl -I localhost:4321`), static builds via the emitted `_headers` file (Netlify and Cloudflare), and Vercel server builds via the deploy's routing rules.
+
+Not every agent enters through the root, though — one following a search result or a shared link lands on a deep page and never sees the homepage header. So every rendered page also carries the same discovery links in its HTML `<head>`, using the same IANA-registered relations:
+
+```html
+<link
+  rel="describedby"
+  href="/agent-readability.json"
+  type="application/json"
+/>
+<link rel="describedby" href="/llms.txt" type="text/plain" />
+<link rel="alternate" href="/docs/example.md" type="text/markdown" />
+```
+
+Here the `alternate` link points at _that page's own_ [raw-Markdown mirror](#raw-markdown), so an agent can jump straight from the HTML it landed on to the token-efficient version. Because the head links travel with the prerendered HTML, they also work on hosts that ignore `_headers` and can't send custom response headers at all (GitHub Pages, S3) — no matter which page the agent enters on.
 
 ### API catalog
 

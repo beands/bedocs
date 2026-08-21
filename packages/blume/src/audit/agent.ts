@@ -1,7 +1,7 @@
-import { spawn } from "node:child_process";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
+import spawn from "cross-spawn";
 import { join } from "pathe";
 
 import { reportJson } from "./report.ts";
@@ -19,7 +19,7 @@ export interface AgentCli {
 
 export type AgentKind = "claude" | "codex";
 
-export const AGENTS: Record<AgentKind, AgentCli> = {
+export const AGENTS = {
   claude: {
     bin: "claude",
     install: "npm install -g @anthropic-ai/claude-code",
@@ -30,7 +30,7 @@ export const AGENTS: Record<AgentKind, AgentCli> = {
     install: "npm install -g @openai/codex",
     name: "Codex",
   },
-};
+} satisfies Record<AgentKind, AgentCli>;
 
 /**
  * Write the full JSON report where the agent can read it. A file rather than
@@ -61,37 +61,26 @@ Work through every finding:
 
 When you are done, run \`bedocs build\` and then \`bedocs audit\` to verify, and repeat until the audit reports no issues.`;
 
-const spawnAgent = (
-  command: string,
-  args: string[],
-  shell: boolean
-): Promise<number> =>
+const spawnAgent = (bin: string, args: string[]): Promise<number> =>
   // oxlint-disable-next-line promise/avoid-new -- adapt spawn's event callbacks
   new Promise((resolve, reject) => {
-    const child = spawn(command, args, { shell, stdio: "inherit" });
+    const child = spawn(bin, args, { stdio: "inherit" });
     child.once("error", reject);
     child.once("close", (code) => resolve(code ?? 1));
   });
 
 /**
- * cmd.exe reports a missing executable through this exit code instead of a
- * spawn error, so a shell launch can't rely on the `error` event for the
- * "not installed" diagnosis.
- */
-export const WINDOWS_COMMAND_NOT_FOUND = 9009;
-
-/**
  * Run the agent CLI interactively with the handoff prompt, inheriting the
  * terminal so the user watches and steers the fixes rather than granting a
  * headless process blanket write access. Resolves with the agent's exit code;
- * rejects when the executable isn't on PATH.
+ * rejects when the executable isn't on PATH — on every platform, since
+ * cross-spawn resolves npm's `.cmd` shims itself and escapes their arguments
+ * (the old `shell: true` launch left quoting to a hand-built command line and
+ * reported a missing executable as cmd.exe's exit code 9009).
  *
- * On Windows, npm installs agent CLIs as `.cmd` shims, which Node refuses to
- * spawn without a shell — and cmd.exe cannot carry the multi-line prompt as an
- * argument (a newline ends the command). So there the prompt is written to a
- * file next to the report and handed over via a one-line pointer that survives
- * cmd.exe quoting; a missing executable surfaces as
- * {@link WINDOWS_COMMAND_NOT_FOUND} rather than a rejection.
+ * cmd.exe still cannot carry the multi-line prompt as an argument (a newline
+ * ends the command), so on Windows the prompt is written to a file next to
+ * the report and handed over via a one-line pointer.
  */
 export const launchAgent = async (
   bin: string,
@@ -99,16 +88,12 @@ export const launchAgent = async (
   platform: NodeJS.Platform = process.platform
 ): Promise<number> => {
   if (platform !== "win32") {
-    return await spawnAgent(bin, [prompt], false);
+    return await spawnAgent(bin, [prompt]);
   }
   const dir = await mkdtemp(join(tmpdir(), "blume-audit-"));
   const promptPath = join(dir, "prompt.md");
   await writeFile(promptPath, prompt);
-  // Double quotes are the one grouping cmd.exe respects; neither the temp
-  // path nor the fixed pointer text can contain one.
-  return await spawnAgent(
-    `"${bin}" "Read ${promptPath} and follow its instructions exactly."`,
-    [],
-    true
-  );
+  return await spawnAgent(bin, [
+    `Read ${promptPath} and follow its instructions exactly.`,
+  ]);
 };

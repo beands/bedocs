@@ -22,7 +22,7 @@ import {
 } from "@/scenes/audit-terminal";
 import { BlumeLogo } from "@/scenes/blume-logo";
 
-// The Blume 1.1 launch video: `blume audit`. Same visual system as the 1.0
+// The Blume 1.1 launch video: `bedocs audit`. Same visual system as the 1.0
 // launch — gradient photo backdrop, frosted cards, Geist — but a tighter cut
 // built around one feature.
 
@@ -101,7 +101,7 @@ const SceneTagline = () => (
 );
 
 // ─── Scene 2 · The report ───────────────────────────────────────────────────
-// A frosted terminal: `blume audit` dumps the findings report.
+// A frosted terminal: `bedocs audit` dumps the findings report.
 const SceneReport = () => <AuditReport />;
 
 // ─── Scene 3 · The question ─────────────────────────────────────────────────
@@ -171,7 +171,7 @@ const SceneCta = () => (
   // to the final frame.
   <Sequence durationInFrames={90} layout="none">
     <Typewriter
-      text="blume audit"
+      text="bedocs audit"
       fontSize={64}
       charsPerSecond={16}
       color={WHITE}
@@ -187,8 +187,9 @@ const SceneCta = () => (
 const SceneLogo = () => <BlumeLogo color={WHITE} wordmarkSize={122} />;
 
 // Wire the shipped Geist faces to the CSS variables every remocn component
-// reads (`var(--font-geist-sans)` / `var(--font-geist-mono)`). Asserted because
-// CSSProperties doesn't type custom `--*` keys in this @types/react version.
+// reads (`var(--font-geist-sans)` / `var(--font-geist-mono)`).
+// SAFETY: the object holds only `--*` custom properties — valid inline style
+// keys that CSSProperties cannot type in this @types/react version.
 const FONT_VARS = {
   "--font-geist-mono": GEIST_MONO,
   "--font-geist-sans": GEIST_SANS,

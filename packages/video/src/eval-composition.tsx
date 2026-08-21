@@ -25,10 +25,10 @@ import {
   EvalYaml,
 } from "@/scenes/eval-terminal";
 
-// The `blume eval` launch video. Same visual system as the audit cut —
+// The `bedocs eval` launch video. Same visual system as the audit cut —
 // gradient photo backdrop, frosted cards, Geist — arranged problem-first:
 // humans and agents ask your docs questions; are they getting the right
-// answers? Write the questions down, and `blume eval` finds out.
+// answers? Write the questions down, and `bedocs eval` finds out.
 
 const { fontFamily: GEIST_SANS } = loadGeistSans("normal", {
   subsets: ["latin"],
@@ -241,7 +241,7 @@ const SceneSolution = () => (
 const SceneYaml = () => <EvalYaml />;
 
 // ─── Scene 5 · The run ──────────────────────────────────────────────────────
-// The same frosted card, now a terminal: `blume eval` grades every question.
+// The same frosted card, now a terminal: `bedocs eval` grades every question.
 const SceneRun = () => <EvalRun />;
 
 // ─── Scene 6 · The feature run ──────────────────────────────────────────────
@@ -265,7 +265,7 @@ const SceneCta = () => (
   // to the final frame.
   <Sequence durationInFrames={90} layout="none">
     <Typewriter
-      text="blume eval"
+      text="bedocs eval"
       fontSize={64}
       charsPerSecond={16}
       color={WHITE}
@@ -281,8 +281,9 @@ const SceneCta = () => (
 const SceneLogo = () => <BlumeLogo color={WHITE} wordmarkSize={122} />;
 
 // Wire the shipped Geist faces to the CSS variables every remocn component
-// reads (`var(--font-geist-sans)` / `var(--font-geist-mono)`). Asserted because
-// CSSProperties doesn't type custom `--*` keys in this @types/react version.
+// reads (`var(--font-geist-sans)` / `var(--font-geist-mono)`).
+// SAFETY: the object holds only `--*` custom properties — valid inline style
+// keys that CSSProperties cannot type in this @types/react version.
 const FONT_VARS = {
   "--font-geist-mono": GEIST_MONO,
   "--font-geist-sans": GEIST_SANS,

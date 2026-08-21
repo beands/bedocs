@@ -9,9 +9,9 @@ import {
 } from "remotion";
 
 // The two audit terminal scenes, sharing one frosted-card renderer:
-//   AuditReport — `blume audit` dumps a findings report (grouped by check,
+//   AuditReport — `bedocs audit` dumps a findings report (grouped by check,
 //   exactly the shape the real CLI prints).
-//   AuditAgent — `blume audit --codex` hands the findings to Codex (the
+//   AuditAgent — `bedocs audit --codex` hands the findings to Codex (the
 //   startup banner and the echoed fix prompt, mirroring the docs CLI page's
 //   Audit spotlight), then Codex works through the findings and reports done.
 
@@ -87,7 +87,7 @@ const CODEX_BANNER = {
 };
 
 const CODEX_PROMPT: string[][] = [
-  ["Fix the issues found by `blume audit` in this project."],
+  ["Fix the issues found by `bedocs audit` in this project."],
   [
     "The full audit report is at report.json. It is JSON: each entry in `diagnostics` is one finding, with the check `code`, a `message` explaining what is wrong, the affected page `url`, the source `file` to edit (relative to the current directory, with a `line` when the finding points at a specific front matter key), and a `suggestion` describing the fix.",
   ],
@@ -98,7 +98,7 @@ const CODEX_PROMPT: string[][] = [
     "3. Never fix a finding by deleting a page, removing content, or hiding it from the audit; if a finding genuinely needs a human decision, leave it and say so in your summary.",
   ],
   [
-    "When you are done, run `blume build` and then `blume audit` to verify, and repeat until the audit reports no issues.",
+    "When you are done, run `bedocs build` and then `bedocs audit` to verify, and repeat until the audit reports no issues.",
   ],
 ];
 
@@ -109,7 +109,7 @@ const REPORT_SUMMARY = "10,788 audits · 39 errors · 52 warnings · 0 notes";
 // packages/blume/src/audit/report.ts — real check titles, real fix strings,
 // counts that add up (39 errors + 52 warnings = 91 findings handed off later).
 const REPORT_LINES: TermLine[] = [
-  { delay: 16, kind: "cmd", text: "blume audit" },
+  { delay: 16, kind: "cmd", text: "bedocs audit" },
   { delay: 10, kind: "blank" },
   { delay: 0, kind: "header", meta: REPORT_HEADER_META },
   { delay: 3, kind: "summary", text: REPORT_SUMMARY },
@@ -181,7 +181,7 @@ const REPORT_LINES: TermLine[] = [
 // real `--codex` run re-prints the report before handing off), the Codex
 // session, then Codex works through the findings and reports done.
 const AGENT_LINES: TermLine[] = [
-  { delay: 16, kind: "cmd", text: "blume audit --codex" },
+  { delay: 16, kind: "cmd", text: "bedocs audit --codex" },
   { delay: 10, kind: "blank" },
   { delay: 0, kind: "header", meta: REPORT_HEADER_META },
   { delay: 3, kind: "summary", text: REPORT_SUMMARY },
@@ -252,11 +252,11 @@ const AGENT_SCRIPT = makeScript(AGENT_LINES, 56);
 export const AUDIT_REPORT_DURATION = REPORT_SCRIPT.duration;
 export const AUDIT_AGENT_DURATION = AGENT_SCRIPT.duration;
 
-const SEVERITY_COLOR: Record<Severity, string> = {
+const SEVERITY_COLOR = {
   error: ERROR,
   warning: WARNING,
-};
-const GLYPH: Record<Severity, string> = { error: "✖", warning: "⚠" };
+} satisfies Record<Severity, string>;
+const GLYPH = { error: "✖", warning: "⚠" } satisfies Record<Severity, string>;
 
 // Braille spinner for the Codex working line, advanced every 3 frames.
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];

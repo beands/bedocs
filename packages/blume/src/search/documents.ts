@@ -1,3 +1,8 @@
+import type { Nodes } from "mdast";
+import { fromMarkdown } from "mdast-util-from-markdown";
+import { gfmFromMarkdown } from "mdast-util-gfm";
+import { gfm } from "micromark-extension-gfm";
+
 import { applyAudienceVisibility } from "../ai/visibility.ts";
 import type { VisibilityAudience } from "../ai/visibility.ts";
 import matter from "../core/frontmatter.ts";
@@ -21,6 +26,8 @@ export interface SearchDocument {
   locale: string;
   /** Resolved page `type` (`doc`, `blog`, a custom `rfc`…), for type filters. */
   contentType: string;
+  /** Docs version (`""` for the current docs), so results scope to the viewed version. */
+  version: string;
   /** Frontmatter `search.tags`, surfaced for hosted-provider faceting. */
   tags?: string[];
   /**
@@ -43,51 +50,96 @@ export interface SearchRecord {
   content: string;
   /** Locale code, carried as a facet for per-language filtering. */
   locale: string;
+  /**
+   * Docs version, carried as a facet for per-version filtering. The current
+   * docs upload as `"current"` — hosted backends treat an empty facet value
+   * unreliably, so the sentinel stands in for the empty version id.
+   */
+  version: string;
   /** Single faceting tag (the first frontmatter tag, when present). */
   tag?: string;
 }
 
-const CODE_FENCE = /```[\s\S]*?```/gu;
-const INLINE_CODE = /`(?<code>[^`]+)`/gu;
 // Tag-shaped only: a name (or closing slash/fragment) right after `<`, and no
-// newline inside. A bare `<` in prose ("costs < 5 credits") must not swallow
-// everything up to some later `>` — potentially whole paragraphs.
+// newline inside. Applied *within* html/JSX nodes so their inner prose is
+// kept; the surrounding Markdown is walked as a tree, so a bare `<` in prose
+// ("costs < 5 credits") is ordinary text and never at risk.
 const HTML_OR_JSX = /<\/?[a-zA-Z][^\n<>]*>|<\/?>/gu;
-const IMAGE = /!\[[^\]]*\]\([^)]*\)/gu;
-const LINK = /\[(?<text>[^\]]*)\]\([^)]*\)/gu;
-const HEADING_MARK = /^#{1,6}\s+/gmu;
-const MARKDOWN_PUNCT = /[*_~>]+/gu;
 const WHITESPACE = /\s+/gu;
 
-/** Reduce Markdown/MDX to plain, searchable text. */
-const toPlainText = (markdown: string): string => {
-  const withoutBlocks = markdown
-    .replaceAll(CODE_FENCE, " ")
-    .replaceAll(IMAGE, " ")
-    .replaceAll(LINK, "$<text>");
+// Parents whose children are inline: no separator is inserted after them, or
+// `re*ally*` would index as `re ally`. Every other parent is block-shaped and
+// ends with a space so adjacent paragraphs/headings/cells don't fuse.
+const INLINE_PARENTS = new Set([
+  "delete",
+  "emphasis",
+  "footnoteReference",
+  "link",
+  "linkReference",
+  "strong",
+]);
 
-  // Strip HTML/JSX from the prose, but keep the contents of inline code — an
-  // angle-bracket span like `<T>` inside `Array<T>` is a type parameter, not a
-  // tag, and stripping it would drop those tokens from the search index. Split
-  // on inline-code spans and only run the HTML strip on the text between them.
-  const pieces: string[] = [];
-  let cursor = 0;
-  for (const match of withoutBlocks.matchAll(INLINE_CODE)) {
-    const start = match.index ?? 0;
-    pieces.push(
-      withoutBlocks.slice(cursor, start).replaceAll(HTML_OR_JSX, " "),
-      match.groups?.code ?? ""
-    );
-    cursor = start + match[0].length;
+/** Fold one mdast node into the plain-text accumulator. */
+const collectText = (node: Nodes, out: string[]): void => {
+  switch (node.type) {
+    // Fenced code is excluded from the plain index (ranking noise) — the
+    // "markdown" extraction keeps it for Ask AI grounding — and image alt
+    // text was never indexed.
+    case "code":
+    case "image":
+    case "imageReference": {
+      return;
+    }
+    // Inline code is kept verbatim — `Array<T>` is a type parameter, not a
+    // tag, and its tokens must stay searchable.
+    case "inlineCode": {
+      out.push(node.value);
+      return;
+    }
+    // A raw-HTML/JSX run. CommonMark parses a block-level `<Callout>` with no
+    // blank lines as ONE html node holding all its inner prose, so the node
+    // can't just be dropped — strip the tag-shaped runs and keep the text.
+    case "html": {
+      out.push(node.value.replaceAll(HTML_OR_JSX, " "));
+      return;
+    }
+    case "break": {
+      out.push(" ");
+      return;
+    }
+    default: {
+      break;
+    }
   }
-  pieces.push(withoutBlocks.slice(cursor).replaceAll(HTML_OR_JSX, " "));
+  if ("value" in node) {
+    out.push(node.value);
+    return;
+  }
+  if ("children" in node) {
+    for (const child of node.children) {
+      collectText(child, out);
+    }
+    if (!INLINE_PARENTS.has(node.type)) {
+      out.push(" ");
+    }
+  }
+};
 
-  return pieces
-    .join("")
-    .replaceAll(HEADING_MARK, "")
-    .replaceAll(MARKDOWN_PUNCT, " ")
-    .replaceAll(WHITESPACE, " ")
-    .trim();
+/**
+ * Reduce Markdown/MDX to plain, searchable text: parse (GFM included) and walk
+ * the tree instead of regex-stripping the source, so reference-style links,
+ * autolinks, setext headings, tables, and literal `*`/`~`/`>` in prose all
+ * reduce correctly. This feeds the client index *and* every hosted-provider
+ * record, so anything lost here is a permanent search-quality loss.
+ */
+const toPlainText = (markdown: string): string => {
+  const tree = fromMarkdown(markdown, {
+    extensions: [gfm()],
+    mdastExtensions: [gfmFromMarkdown()],
+  });
+  const out: string[] = [];
+  collectText(tree, out);
+  return out.join("").replaceAll(WHITESPACE, " ").trim();
 };
 
 interface Crumbs {
@@ -169,10 +221,17 @@ export const buildSearchDocuments = async (
   // locale-prefixed routes), so localized pages get the right section/breadcrumb.
   // Falls back to the single default-locale nav when i18n is off.
   const byLocale = Object.values(project.graph.navigationByLocale ?? {});
-  const sidebars =
-    byLocale.length > 0
+  // Archived versions' trees contribute too, so snapshot pages get their own
+  // section/breadcrumb instead of falling through to the "Docs" default.
+  const byVersion = Object.values(project.graph.navigationByVersion ?? {})
+    .flatMap((locales) => Object.values(locales))
+    .map((nav) => nav.sidebar);
+  const sidebars = [
+    ...(byLocale.length > 0
       ? byLocale.map((nav) => nav.sidebar)
-      : [project.graph.navigation?.sidebar ?? []];
+      : [project.graph.navigation?.sidebar ?? []]),
+    ...byVersion,
+  ];
   const crumbs = new Map<string, Crumbs>();
   for (const sidebar of sidebars) {
     for (const [route, crumb] of buildCrumbIndex(sidebar)) {
@@ -202,18 +261,22 @@ export const buildSearchDocuments = async (
       const tags = page?.meta?.search?.tags;
       const crumb = crumbs.get(route.path);
       const facets = page ? pageFacets(page, project.config) : undefined;
-      return {
+      const document: SearchDocument = {
         breadcrumb: crumb?.breadcrumb ?? [],
         content: body,
         contentType: route.contentType,
         description: page?.description ?? "",
-        ...(facets ? { facets } : {}),
         locale: route.locale,
         route: route.path,
         section: crumb?.section || "Docs",
         tags: tags && tags.length > 0 ? tags : undefined,
         title: route.title,
+        version: route.version,
       };
+      if (facets) {
+        document.facets = facets;
+      }
+      return document;
     })
   );
 };
@@ -232,4 +295,5 @@ export const toSearchRecords = (documents: SearchDocument[]): SearchRecord[] =>
     tag: doc.tags?.[0],
     title: doc.title,
     url: doc.route,
+    version: doc.version || "current",
   }));

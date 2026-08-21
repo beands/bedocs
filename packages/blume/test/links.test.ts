@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
 import { join } from "pathe";
@@ -15,6 +15,13 @@ import type {
 } from "../src/core/types.ts";
 
 const link = (target: string): PageLink => ({ column: 1, line: 1, target });
+
+const image = (target: string): PageLink => ({
+  column: 1,
+  image: true,
+  line: 1,
+  target,
+});
 
 const heading = (text: string, slug: string): Heading => ({
   depth: 2,
@@ -38,10 +45,14 @@ const makePage = (
   sourcePath: `/abs/${over.id}`,
   title: over.id,
   translationKey: over.route,
+  version: "",
+  versionKey: over.route,
   ...over,
 });
 
 const makeGraph = (pages: PageRecord[]): ContentGraph =>
+  // SAFETY: link validation reads only pages and routes; the empty nav shells
+  // stand in for the graph fields it never touches.
   ({
     diagnostics: [],
     navigation: {
@@ -51,6 +62,7 @@ const makeGraph = (pages: PageRecord[]): ContentGraph =>
       tabs: [],
     },
     navigationByLocale: {},
+    navigationByVersion: {},
     pages,
     routes: new Map(pages.map((page) => [page.route, page.id])),
   }) as ContentGraph;
@@ -83,7 +95,7 @@ describe(extractLinks, () => {
 
   it("skips link syntax inside inline code spans", () => {
     // Prose that *shows* Markdown link syntax must not register a link —
-    // `/nope` would otherwise fail `blume validate` as a broken link.
+    // `/nope` would otherwise fail `bedocs validate` as a broken link.
     const body = "Use `[label](/nope)` syntax, then see [real](/yes).";
     expect(extractLinks(body)).toStrictEqual([
       { column: 46, line: 1, target: "/yes" },
@@ -112,10 +124,22 @@ describe(extractLinks, () => {
 
   it("extracts both targets of an image-wrapped link", () => {
     // The outer link target and the nested image target are both validated,
-    // each with a column pointing at its own target.
+    // each with a column pointing at its own target. Only the nested target
+    // is an image — the outer href resolves as a site route.
     expect(extractLinks("[![alt](/img.png)](/target)")).toStrictEqual([
       { column: 20, line: 1, target: "/target" },
-      { column: 9, line: 1, target: "/img.png" },
+      { column: 9, image: true, line: 1, target: "/img.png" },
+    ]);
+  });
+
+  it("marks an image embed's target as an image", () => {
+    // Validation treats image embeds and plain links differently — only the
+    // former go through the image pipeline — so the `!` must be recorded.
+    expect(
+      extractLinks("![alt](./diagram.png) and [dl](./diagram.png)")
+    ).toStrictEqual([
+      { column: 8, image: true, line: 1, target: "./diagram.png" },
+      { column: 32, line: 1, target: "./diagram.png" },
     ]);
   });
 
@@ -377,15 +401,27 @@ describe(validateLinks, () => {
 });
 
 describe("validateLinks — assets against a public dir", () => {
+  let root: string;
   let publicDir: string;
+  let contentDir: string;
 
   beforeAll(async () => {
-    publicDir = await mkdtemp(join(tmpdir(), "blume-public-"));
+    root = await mkdtemp(join(tmpdir(), "blume-links-"));
+    publicDir = join(root, "public");
+    contentDir = join(root, "content");
+    // `folder.png` is a *directory* named like an image; `screenshot.png` and
+    // `diagram.png` are real files a page under guides/ can reference.
+    await mkdir(join(contentDir, "guides", "folder.png"), { recursive: true });
+    await mkdir(join(contentDir, "images"), { recursive: true });
+    await mkdir(publicDir, { recursive: true });
     await writeFile(join(publicDir, "logo.png"), "binary");
+    await writeFile(join(contentDir, "guides", "screenshot.png"), "binary");
+    await writeFile(join(contentDir, "guides", "my photo.png"), "binary");
+    await writeFile(join(contentDir, "images", "diagram.png"), "binary");
   });
 
   afterAll(async () => {
-    await rm(publicDir, { force: true, recursive: true });
+    await rm(root, { force: true, recursive: true });
   });
 
   const validateWithPublic = (pages: PageRecord[]) =>
@@ -416,5 +452,102 @@ describe("validateLinks — assets against a public dir", () => {
       makePage({ id: "releases/v1.0.mdx", route: "/releases/v1.0" }),
     ]);
     expect(diagnostics).toHaveLength(0);
+  });
+
+  const guidePage = (links: PageLink[]) =>
+    makePage({
+      id: "guides/a.mdx",
+      links,
+      route: "/guides/a",
+      sourcePath: join(contentDir, "guides", "a.mdx"),
+    });
+
+  it("accepts a colocated image embed that exists next to the page source", async () => {
+    // A relative image embed never reaches `public/` — Astro's pipeline emits
+    // it to `_astro/` from beside the content — so probing the public dir
+    // alone reports a reference the built site renders.
+    const diagnostics = await validateWithPublic([
+      guidePage([image("./screenshot.png"), image("../images/diagram.png")]),
+    ]);
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it("still flags a plain link to a colocated image", async () => {
+    // Only `![]()` embeds go through the image pipeline; a plain
+    // `[text](./x.png)` href resolves as a site route and 404s on the built
+    // site, so the public-dir diagnostic (and its suggestion) stays correct.
+    const diagnostics = await validateWithPublic([
+      guidePage([link("./screenshot.png")]),
+    ]);
+    expect(diagnostics.map((d) => d.code)).toStrictEqual([
+      "BLUME_BROKEN_ASSET",
+    ]);
+    expect(diagnostics[0]?.suggestion).toContain(
+      "public/guides/screenshot.png"
+    );
+  });
+
+  it("flags an image embed whose target carries a query or fragment suffix", async () => {
+    // The rewrite/serve path sees the raw target and skips `./x.png?v=2`, so
+    // accepting it here would green-light a reference agents 404 on.
+    const diagnostics = await validateWithPublic([
+      guidePage([
+        image("./screenshot.png?v=2"),
+        image("./screenshot.png#frag"),
+      ]),
+    ]);
+    expect(diagnostics.map((d) => d.code)).toStrictEqual([
+      "BLUME_BROKEN_ASSET",
+      "BLUME_BROKEN_ASSET",
+    ]);
+  });
+
+  it("resolves an encoded colocated reference exactly like the rewriter", async () => {
+    // One decode, same as `rewriteRelativeImages`: `%20` finds `my photo.png`,
+    // a double-encoded `%2520` does not — validation must not vouch for a
+    // reference the rewriter leaves verbatim.
+    const diagnostics = await validateWithPublic([
+      guidePage([image("./my%20photo.png"), image("./my%2520photo.png")]),
+    ]);
+    expect(diagnostics.map((d) => d.code)).toStrictEqual([
+      "BLUME_BROKEN_ASSET",
+    ]);
+    expect(diagnostics[0]?.message).toContain("./my%2520photo.png");
+  });
+
+  it("rejects a case-mismatched or directory-shaped colocated reference", async () => {
+    // `./Screenshot.PNG` resolves via existsSync on a case-insensitive
+    // filesystem but breaks on the Linux build; `./folder.png` is a directory.
+    const diagnostics = await validateWithPublic([
+      guidePage([image("./Screenshot.PNG"), image("./folder.png")]),
+    ]);
+    expect(diagnostics.map((d) => d.code)).toStrictEqual([
+      "BLUME_BROKEN_ASSET",
+      "BLUME_BROKEN_ASSET",
+    ]);
+  });
+
+  it("still warns when a relative image is missing from both locations", async () => {
+    const diagnostics = await validateWithPublic([
+      guidePage([image("./missing.png")]),
+    ]);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]?.code).toBe("BLUME_BROKEN_ASSET");
+    // The reference resolves beside the page source, so the diagnostic must
+    // point there — adding the file under public/ would not fix the page.
+    expect(diagnostics[0]?.message).toContain("next to a.mdx");
+    expect(diagnostics[0]?.suggestion).not.toContain("public");
+  });
+
+  it("warns on a missing colocated image even without a public directory", async () => {
+    // The page source dir was checked and missed — that is enough to report,
+    // not to demote to the unchecked-assets info aggregate.
+    const diagnostics = await validateLinks(
+      makeGraph([guidePage([image("./missing.png")])]),
+      { publicDir: null }
+    );
+    expect(diagnostics.map((d) => d.code)).toStrictEqual([
+      "BLUME_BROKEN_ASSET",
+    ]);
   });
 });

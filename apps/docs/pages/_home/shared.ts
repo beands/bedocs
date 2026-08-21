@@ -5,7 +5,7 @@
 // ready-to-inline, self-styled SVG inner markup; the section templates wrap it
 // in an `<svg viewBox="0 0 24 24">` root.
 
-import { resolveIcon } from "blume/theme/icons.ts";
+import { resolveIcon } from "@beands/bedocs/theme/icons.ts";
 
 // Resolve a Lucide name to its inline body, or empty markup if it ever drops
 // out of the set (keeps the homepage rendering rather than throwing at build).
@@ -20,6 +20,7 @@ export const icons = {
   changelog: glyph("history"),
   chat: glyph("message-square"),
   check: glyph("check"),
+  chevronDown: glyph("chevron-down"),
   cloud: glyph("cloud-check"),
   components: glyph("box"),
   config: glyph("settings-2"),
@@ -75,7 +76,7 @@ export const sampleBrand = {
 };
 
 // Render a prose string whose code spans are marked with backticks (`--flag`,
-// `blume init`) as HTML: everything else is escaped, each span becomes a
+// `bedocs init`) as HTML: everything else is escaped, each span becomes a
 // styled <code>. For the landing-page sections whose copy lives in data
 // arrays, where inline <code> elements can't be authored directly.
 const escapeHtml = (text: string): string =>

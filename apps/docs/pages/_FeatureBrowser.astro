@@ -18,6 +18,8 @@ const { kind } = Astro.props;
 // bare bodies; the <svg> wrappers below supply size/stroke. The lightbulb
 // matches the shipped <Callout type="tip"> icon (see ProductPreview).
 const searchIcon = glyph("search");
+const globeIcon = glyph("globe");
+const chevronDown = glyph("chevron-down");
 const lightbulb = glyph("lightbulb");
 const check = glyph("check");
 const folder = glyph("folder");
@@ -145,7 +147,7 @@ const changelogEntries = [
 <div class="relative flex h-full flex-col">
   {/* App header */}
   <div
-    class="flex items-center justify-between border-border border-b px-4 py-2.5"
+    class="flex items-center justify-between px-4 py-2.5"
   >
     <div class="flex items-center gap-4">
       <span class="flex items-center gap-1.5 font-medium text-foreground text-sm">
@@ -168,24 +170,55 @@ const changelogEntries = [
         </span>
       </nav>
     </div>
-    <span
-      class="hidden items-center gap-2 rounded-full border border-border px-3 py-1 text-[11px] text-muted-foreground sm:flex"
-    >
-      <svg
-        class="size-3"
-        fill="none"
-        height="12"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        viewBox="0 0 24 24"
-        width="12"
-        set:html={searchIcon}
-      />
-      Search
-      <span class="ml-2 rounded border border-border px-1 font-mono">⌘K</span>
-    </span>
+    <div class="flex items-center gap-2">
+      <span
+        class="hidden items-center gap-1.5 rounded-full border border-border px-3 py-1 text-[11px] text-muted-foreground lg:flex"
+      >
+        <svg
+          class="size-3"
+          fill="none"
+          height="12"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="12"
+          set:html={globeIcon}
+        />
+        English
+        <svg
+          class="size-2.5"
+          fill="none"
+          height="10"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="10"
+          set:html={chevronDown}
+        />
+      </span>
+      <span
+        class="hidden items-center gap-2 rounded-full border border-border px-3 py-1 text-[11px] text-muted-foreground sm:flex"
+      >
+        <svg
+          class="size-3"
+          fill="none"
+          height="12"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="12"
+          set:html={searchIcon}
+        />
+        Search
+        <span class="ml-2 font-mono">⌘K</span>
+      </span>
+    </div>
   </div>
 
   {/* Three-pane docs body — except the changelog, whose generated page is a
@@ -196,7 +229,7 @@ const changelogEntries = [
     {/* Sidebar */}
     {
       kind !== "changelog" && (
-        <aside class="hidden border-border border-r p-4 text-[11px] sm:block">
+        <aside class="hidden p-4 text-[11px] sm:block">
           {kind === "api"
             ? apiGroups.map((group) => (
                 <div class="mb-4 last:mb-0">
@@ -240,7 +273,7 @@ const changelogEntries = [
         kind !== "changelog" && (
           <Fragment>
             <p class="text-[11px] text-muted-foreground">{view.crumb}</p>
-            <h4 class="mt-1 font-semibold text-foreground text-xl tracking-tight">
+            <h4 class="mt-1 font-semibold text-foreground text-xl">
               {view.heading}
             </h4>
           </Fragment>
@@ -505,7 +538,7 @@ const changelogEntries = [
       {
         kind === "changelog" && (
           <div>
-            <h4 class="font-semibold text-2xl text-foreground tracking-tight">
+            <h4 class="font-semibold text-2xl text-foreground">
               Changelog
             </h4>
             <div class="mt-6 space-y-6">
@@ -550,7 +583,7 @@ const changelogEntries = [
     {/* On this page */}
     {
       kind !== "changelog" && (
-        <aside class="hidden border-border border-l p-4 text-[11px] lg:block">
+        <aside class="hidden p-4 text-[11px] lg:block">
           <p class="font-medium text-foreground">On this page</p>
           <ul class="mt-2 space-y-1.5 text-muted-foreground">
             {view.toc.map((item, index) => (
@@ -566,8 +599,8 @@ const changelogEntries = [
         included — like the real ⌘K overlay. */}
     {
       kind === "search" && (
-        <div class="absolute inset-0 z-10 flex items-start justify-center bg-foreground/20 p-6 pt-20 backdrop-blur-[2px]">
-          <div class="w-full max-w-md overflow-hidden rounded-blume border border-border bg-background shadow-2xl shadow-foreground/20">
+        <div class="absolute inset-0 z-10 flex items-start justify-center bg-black/30 p-6 pt-20 backdrop-blur-[2px]">
+          <div class="w-full max-w-md overflow-hidden rounded-blume border border-border bg-background shadow-2xl">
             <div class="flex items-center gap-2 border-border border-b px-3 py-2.5">
               <svg
                 class="size-3.5 text-muted-foreground"

@@ -1,4 +1,5 @@
 ---
+import { componentSlug } from "../slug.ts";
 import { contentHref } from "./base-href.ts";
 
 interface RssMetadata {
@@ -31,16 +32,8 @@ const {
   tags,
   title,
 } = Astro.props;
-const slugify = (text: string): string =>
-  text
-    .toLowerCase()
-    .trim()
-    .replaceAll(/[^\w\s-]/gu, "")
-    .replaceAll(/[\s_]+/gu, "-")
-    .replaceAll(/-+/gu, "-")
-    .replaceAll(/^-|-$/gu, "");
 const updateLabel = label ?? title ?? "Update";
-const id = providedId ?? (slugify(updateLabel) || "update");
+const id = providedId ?? (componentSlug(updateLabel) || "update");
 const tagList = Array.isArray(tags) ? tags : tags ? [tags] : [];
 ---
 
@@ -117,6 +110,9 @@ const tagList = Array.isArray(tags) ? tags : tags ? [tags] : [];
       }
     };
 
+    // Client-router swaps replace the body with fresh server-rendered entries
+    // (duplicate ids and all), so the dedupe has to run again for each page.
+    document.addEventListener("astro:after-swap", dedupeUpdateIds);
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", dedupeUpdateIds, {
         once: true,

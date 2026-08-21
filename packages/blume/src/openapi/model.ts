@@ -1,27 +1,26 @@
-import type {
-  Document,
-  OperationObject,
-  PathItemObject,
-} from "@scalar/openapi-types/3.1";
+import type { Document, OperationObject } from "@scalar/openapi-types/3.1";
+
+import type { AsyncApiAction, AsyncApiDocument } from "./asyncapi.ts";
+import type { ReferenceKind } from "./references.ts";
+import { slugify } from "./references.ts";
+
+// The slug rules live with the reference resolver so operation routes and
+// reference-source tokens can never drift apart; re-exported for existing
+// importers.
+export { slugify } from "./references.ts";
 
 /**
- * BeDocs's own OpenAPI model. Specs are parsed and upgraded to 3.1 (see
- * `parse.ts`) with internal `$ref`s left intact — the document stays
+ * Blume's own API reference model, shared by both spec kinds. OpenAPI specs
+ * are parsed and upgraded to 3.1, AsyncAPI specs normalized to 3.x (see
+ * `parse.ts`), with internal `$ref`s left intact — the document stays
  * JSON-serializable (a fully dereferenced graph can be circular), and the schema
  * components resolve refs against `document.components.schemas` at render time.
  * Each operation is flattened into an {@link ApiOperationRef} with a real,
- * per-operation route so it becomes a first-class BeDocs page.
+ * per-operation route so it becomes a first-class Blume page.
  */
 
 /** A normalized OpenAPI 3.1 document, internal `$ref`s intact. */
 export type ApiDocument = Document;
-
-const NON_SLUG = /[^a-z0-9]+/gu;
-const SLUG_EDGES = /^-+|-+$/gu;
-
-/** Lowercase, URL-safe slug: `Add a Pet!` -> `add-a-pet`. */
-export const slugify = (text: string): string =>
-  text.toLowerCase().replace(NON_SLUG, "-").replace(SLUG_EDGES, "");
 
 /** The HTTP methods an OpenAPI path item may declare, in spec order. */
 export const HTTP_METHODS = [
@@ -50,22 +49,26 @@ export const operationKey = (
   return fromId || slugify(`${method}-${path}`);
 };
 
-/** One operation, flattened out of the paths object and mapped to a route. */
+/** One operation, flattened out of its document and mapped to a route. */
 export interface ApiOperationRef {
   /** Stable key, unique within a spec; matches the MDX `<Operation id>`. */
   key: string;
-  method: HttpMethod;
-  /** Templated path, e.g. `/pets/{id}`. */
+  /** HTTP method (OpenAPI) or `send`/`receive` action (AsyncAPI). */
+  method: HttpMethod | AsyncApiAction;
+  /** Templated path, e.g. `/pets/{id}` — or the channel address (AsyncAPI). */
   path: string;
   /** Full site route for this operation's page, e.g. `/reference/pet/add-pet`. */
   route: string;
-  /** Display tag name (first tag, or `Operations` when untagged). */
+  /** Display tag name (first tag; `Operations` or the channel address when untagged). */
   tag: string;
   tagSlug: string;
   summary: string;
   description: string;
+  /** The `operationId` (OpenAPI) or the `operations` map key (AsyncAPI). */
   operationId?: string;
   deprecated: boolean;
+  /** The channel the operation acts on (AsyncAPI only). */
+  channelId?: string;
 }
 
 /** A tag/section, in first-seen order. */
@@ -77,6 +80,8 @@ export interface ApiTagRef {
 
 /** Everything the runtime needs for one spec, serialized into `blume:openapi`. */
 export interface ApiSpecData {
+  /** Which front-end parsed the spec (and which components render it). */
+  kind: ReferenceKind;
   /** Unique token used as the `<Operation source>` and the data-module key. */
   slug: string;
   /** Base route the spec's operations hang off, e.g. `/reference`. */
@@ -85,7 +90,7 @@ export interface ApiSpecData {
   title: string;
   version: string;
   description: string;
-  document: ApiDocument;
+  document: ApiDocument | AsyncApiDocument;
   /** Operations keyed by {@link ApiOperationRef.key}. */
   operations: Record<string, ApiOperationRef>;
   tags: ApiTagRef[];
@@ -93,22 +98,39 @@ export interface ApiSpecData {
   codeSamples: string[];
   /** Whether nested schema rows start expanded. */
   expandSchemas: boolean;
+  /**
+   * The "Try it" playground: whether operation pages render it, and the
+   * resolved proxy the Send button targets — `false` for direct requests, a
+   * URL string otherwise (the built-in `/_api-proxy` route already carries
+   * the site `basePath`).
+   */
+  playground: { enabled: boolean; proxy: string | false };
 }
 
 /** The generated `blume:openapi` module: specs keyed by {@link ApiSpecData.slug}. */
 export type OpenApiData = Record<string, ApiSpecData>;
 
-const isOperation = (value: unknown): value is OperationObject =>
-  typeof value === "object" && value !== null;
+// The runtime object check stands guard because the document was parsed from
+// arbitrary YAML/JSON: a spec can put a scalar where the type promises an
+// operation object.
+const isOperation = (
+  value: OperationObject | undefined
+): value is OperationObject => typeof value === "object" && value !== null;
+
+/** A declared tag whose `name` really is a string at runtime, type aside. */
+const hasTagName = (tag: SpecTag): tag is SpecTag =>
+  typeof tag.name === "string";
 
 /**
  * Assign each distinct tag name a unique slug. `slugify` can collapse
- * different names onto one value — any two all-non-ASCII tags (`ペット`,
- * `注文`) both fall through to the `operations` fallback — and a shared slug
+ * different names onto one value — any two punctuation-only tags (`!!!`,
+ * `???`) both fall through to the `operations` fallback — and a shared slug
  * silently merges the tags' routes, sidebar groups, and overview sections.
- * Collisions gain `-2`, `-3`, … in first-seen order.
+ * Collisions gain `-2`, `-3`, … in first-seen order. Shared with the AsyncAPI
+ * extractor (`asyncapi.ts`), whose untagged fallback groups are channel
+ * addresses.
  */
-const tagSlugger = (): ((name: string) => string) => {
+export const tagSlugger = (): ((name: string) => string) => {
   const assigned = new Map<string, string>();
   const taken = new Set<string>();
   return (name) => {
@@ -127,6 +149,79 @@ const tagSlugger = (): ((name: string) => string) => {
   };
 };
 
+/** An operation before the collector assigns its unique key and route. */
+type CollectedOperation = Omit<ApiOperationRef, "route" | "tagSlug">;
+
+/** A document's declared tag entry (`tags[n]`). */
+type SpecTag = NonNullable<ApiDocument["tags"]>[number];
+
+/** The flattened output both extractors produce. */
+export interface CollectedOperations {
+  operations: ApiOperationRef[];
+  tags: ApiTagRef[];
+}
+
+/** The collector handle: feed operations in, read the flattened output out. */
+export interface OperationCollector {
+  add: (entry: CollectedOperation) => void;
+  finish: () => CollectedOperations;
+}
+
+/** {@link CollectedOperations} plus anything the extractor had to skip. */
+export interface ExtractedOperations extends CollectedOperations {
+  warnings: string[];
+}
+
+/**
+ * The collector behind both extractors (OpenAPI here, AsyncAPI in
+ * `asyncapi.ts`): first-seen tag ordering, key de-duplication (a repeated key
+ * gains its method/action as a suffix), and the shared route template — so
+ * URL shape and slug rules can never drift between the two spec kinds.
+ */
+export const operationCollector = (
+  baseRoute: string,
+  tagMeta: ReadonlyMap<string, string>
+): OperationCollector => {
+  const operations: ApiOperationRef[] = [];
+  const tagOrder: string[] = [];
+  const tagsSeen = new Set<string>();
+  const seen = new Set<string>();
+  const slugForTag = tagSlugger();
+
+  const add = (entry: CollectedOperation): void => {
+    const tagSlug = slugForTag(entry.tag);
+    if (!tagsSeen.has(entry.tag)) {
+      tagsSeen.add(entry.tag);
+      tagOrder.push(entry.tag);
+    }
+    let { key } = entry;
+    while (seen.has(key)) {
+      key = `${key}-${entry.method}`;
+    }
+    seen.add(key);
+    operations.push({
+      ...entry,
+      key,
+      // A root-mounted reference (`route: "/"`) must not emit `//tag/key`.
+      route: `${baseRoute === "/" ? "" : baseRoute}/${tagSlug}/${key}`,
+      tagSlug,
+    });
+  };
+
+  const finish = (): CollectedOperations => ({
+    operations,
+    tags: tagOrder.map((name) => ({
+      description: tagMeta.get(name) ?? "",
+      name,
+      // The same slugger instance, so every tag resolves to the slug its
+      // operations were routed under.
+      slug: slugForTag(name),
+    })),
+  });
+
+  return { add, finish };
+};
+
 /**
  * Flatten a 3.1 document into a route-mapped operation list and its ordered
  * tags. Operations inherit the first tag they declare; keys are de-duplicated so
@@ -136,19 +231,17 @@ const tagSlugger = (): ((name: string) => string) => {
 export const extractOperations = (
   document: ApiDocument,
   baseRoute: string
-): { operations: ApiOperationRef[]; tags: ApiTagRef[]; warnings: string[] } => {
-  const operations: ApiOperationRef[] = [];
-  const tagOrder: string[] = [];
-  const tagsSeen = new Set<string>();
-  const tagMeta = new Map(
-    (document.tags ?? []).map((tag) => [tag.name, tag.description ?? ""])
-  );
-  const seen = new Set<string>();
+): ExtractedOperations => {
   const warnings: string[] = [];
-  const slugForTag = tagSlugger();
+  const tagMeta = new Map(
+    (document.tags ?? [])
+      .filter(hasTagName)
+      .map((tag) => [tag.name, tag.description ?? ""])
+  );
+  const collector = operationCollector(baseRoute, tagMeta);
 
-  for (const [path, rawItem] of Object.entries(document.paths ?? {})) {
-    const item = rawItem as PathItemObject | undefined;
+  for (const [path, item] of Object.entries(document.paths ?? {})) {
+    // A parsed spec can carry a null path item despite the type; skip it.
     if (!item) {
       continue;
     }
@@ -163,52 +256,35 @@ export const extractOperations = (
       if (!isOperation(operation)) {
         continue;
       }
-      const tag = operation.tags?.[0] ?? UNTAGGED;
-      const tagSlug = slugForTag(tag);
-      if (!tagsSeen.has(tag)) {
-        tagsSeen.add(tag);
-        tagOrder.push(tag);
-      }
-      let key = operationKey(method, path, operation.operationId);
-      while (seen.has(key)) {
-        key = `${key}-${method}`;
-      }
-      seen.add(key);
-      operations.push({
+      collector.add({
         deprecated: operation.deprecated ?? false,
         description: operation.description ?? "",
-        key,
+        key: operationKey(method, path, operation.operationId),
         method,
         operationId: operation.operationId,
         path,
-        // A root-mounted reference (`route: "/"`) must not emit `//tag/key`.
-        route: `${baseRoute === "/" ? "" : baseRoute}/${tagSlug}/${key}`,
         summary: operation.summary ?? "",
-        tag,
-        tagSlug,
+        tag: operation.tags?.[0] ?? UNTAGGED,
       });
     }
   }
 
-  const tags: ApiTagRef[] = tagOrder.map((name) => ({
-    description: tagMeta.get(name) ?? "",
-    name,
-    // The same slugger instance, so every tag resolves to the slug its
-    // operations were routed under.
-    slug: slugForTag(name),
-  }));
-
-  return { operations, tags, warnings };
+  return { ...collector.finish(), warnings };
 };
 
-/** Resolve the operation object for a ref out of its document. */
+/** Resolve the operation object for a ref out of its (OpenAPI) document. */
 export const operationObject = (
   spec: ApiSpecData,
   ref: ApiOperationRef
 ): OperationObject | undefined => {
-  const item = (spec.document.paths?.[ref.path] ?? undefined) as
-    | PathItemObject
-    | undefined;
-  const operation = item?.[ref.method];
+  // Only OpenAPI refs carry HTTP methods; the AsyncAPI counterpart is
+  // `asyncApiOperationObject` in `asyncapi.ts`.
+  const method = HTTP_METHODS.find((candidate) => candidate === ref.method);
+  // SAFETY: only OpenAPI specs route their refs through this resolver
+  // (AsyncAPI documents go to `asyncApiOperationObject`), so the spec's
+  // document is the OpenAPI shape.
+  const document = spec.document as ApiDocument;
+  const item = document.paths?.[ref.path];
+  const operation = method === undefined ? undefined : item?.[method];
   return isOperation(operation) ? operation : undefined;
 };

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 import { join } from "pathe";
@@ -6,14 +7,15 @@ import { BlumeError } from "../diagnostics.ts";
 import type { Diagnostic } from "../types.ts";
 import type { SourceEntry, SourceLoadResult } from "./types.ts";
 
-/** Small, stable content hash for cache/HMR bookkeeping (non-bitwise). */
-export const hashText = (text: string): string => {
-  let hash = 5381;
-  for (let i = 0; i < text.length; i += 1) {
-    hash = (hash * 33 + (text.codePointAt(i) ?? 0)) % 2_147_483_647;
-  }
-  return hash.toString(36);
-};
+/**
+ * Small, stable content hash for cache/HMR bookkeeping — and for staged asset
+ * *filenames* (see sources/assets.ts and content-assets.ts), where a collision
+ * silently serves the wrong file. 64 bits of SHA-256 keeps those names
+ * collision-safe at any realistic asset count; the old 31-bit DJB2 hash had a
+ * ~46k-item birthday bound.
+ */
+export const hashText = (text: string): string =>
+  createHash("sha256").update(text).digest("hex").slice(0, 16);
 
 /** A stable digest of a source's entries, for change detection while polling. */
 export const entriesDigest = (entries: SourceEntry[]): string =>
@@ -83,6 +85,9 @@ export const snapshotCache = (cacheDir: string): SnapshotCache => {
   return {
     read: async () => {
       try {
+        // SAFETY: the snapshot file is only ever written by `write` below, from
+        // a `SourceEntry[]` via JSON.stringify; a corrupt file lands in the
+        // catch and reads as empty.
         return JSON.parse(await readFile(file, "utf-8")) as SourceEntry[];
       } catch {
         return [];
@@ -124,6 +129,8 @@ export const loadWithCache = async (
   } catch (error) {
     const fallback = await cache.read();
     if (fallback.length > 0) {
+      // SAFETY: everything thrown on this path is an Error — fetch rejects
+      // with a TypeError and the source adapters throw Error instances.
       const diagnostic: Diagnostic = {
         code: "BLUME_SOURCE_OFFLINE",
         message: `Source "${name}" could not be fetched (${(error as Error).message}); served ${fallback.length} cached entries.`,
@@ -131,6 +138,7 @@ export const loadWithCache = async (
       };
       return { diagnostics: [diagnostic], entries: fallback };
     }
+    // SAFETY: same invariant as above — `fetchEntries` failures are Errors.
     throw new BlumeError({
       code: "BLUME_SOURCE_FETCH_FAILED",
       message: `Source "${name}" failed to load and no cache is available: ${(error as Error).message}`,

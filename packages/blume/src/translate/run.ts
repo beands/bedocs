@@ -2,9 +2,11 @@ import { existsSync } from "node:fs";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
+import pLimit from "p-limit";
+import pMap from "p-map";
 import { join } from "pathe";
 
-import { AGENTS, WINDOWS_COMMAND_NOT_FOUND } from "../audit/agent.ts";
+import { AGENTS } from "../audit/agent.ts";
 import type { AgentKind } from "../audit/agent.ts";
 import { writeTextAtomic } from "../core/fs-atomic.ts";
 import type { BlumeProject } from "../core/project-graph.ts";
@@ -56,8 +58,9 @@ export interface TranslateRunOptions {
    * Called after each finished item to flush the ledger to disk, so an
    * interrupted run keeps everything already translated. Calls are serialized
    * here — concurrent workers finishing together never race the same file.
+   * The flush's result (`writeLedger`'s wrote-or-not boolean) is ignored.
    */
-  persistLedger?: () => Promise<unknown>;
+  persistLedger?: () => Promise<boolean | undefined>;
   project: BlumeProject;
   /** The spawn function — injectable so tests never launch a real agent. */
   run?: HeadlessRunner;
@@ -89,9 +92,9 @@ interface RunContext {
 const metaDirKey = (dir: string): string => (dir === "" ? "." : dir);
 
 /**
- * One headless agent call. A Windows shell launch reports a missing executable
- * through exit code 9009 instead of a spawn error, so that is normalized to
- * the ENOENT rejection the command layer already turns into an install hint.
+ * One headless agent call. A missing executable rejects with ENOENT on every
+ * platform (the runner spawns without a shell), which the command layer turns
+ * into an install hint.
  */
 const invokeAgent = async (
   context: RunContext,
@@ -104,13 +107,6 @@ const invokeAgent = async (
     translateAgentArgs(context.kind, messagePath),
     { cwd: context.dir, prompt, timeoutMs: context.timeoutMs }
   );
-  if (!result.timedOut && result.code === WINDOWS_COMMAND_NOT_FOUND) {
-    const missing = new Error(
-      `${context.bin} was not found on PATH`
-    ) as NodeJS.ErrnoException;
-    missing.code = "ENOENT";
-    throw missing;
-  }
   return await readAgentOutput(context.kind, result, messagePath);
 };
 
@@ -134,6 +130,8 @@ const runPageItem = async (
   });
 
   const sourceText = await readFile(item.sourcePath, "utf-8");
+  // SAFETY: `targets` maps every configured locale, and work items only carry
+  // configured locale codes.
   const target = context.targets.get(item.locale) as LocaleConfig;
   // A hand-authored translation can live at a non-canonical name (see
   // WorkStatus); the disk probe finds only canonical targets, and a miss just
@@ -180,6 +178,8 @@ const runMetaItem = async (
   const titles = Object.fromEntries(
     item.entries.map((entry) => [metaDirKey(entry.meta.dir), entry.meta.title])
   );
+  // SAFETY: `targets` maps every configured locale, and work items only carry
+  // configured locale codes.
   const target = context.targets.get(item.locale) as LocaleConfig;
   const output = await invokeAgent(
     context,
@@ -262,6 +262,7 @@ export const runTranslate = async (
   if (!i18n) {
     throw new Error("bedocs translate requires i18n to be configured");
   }
+  // SAFETY: the config schema requires `defaultLocale` to be one of `locales`.
   const source = i18n.locales.find(
     (locale) => locale.code === i18n.defaultLocale
   ) as LocaleConfig;
@@ -277,42 +278,31 @@ export const runTranslate = async (
   };
 
   const { items } = options.workList;
-  const results: TranslateItemResult[] = Array.from({ length: items.length });
   const concurrency = Math.max(
     1,
     Math.min(options.concurrency ?? 1, items.length || 1)
   );
 
-  // The persist chain: whichever lane finishes next appends its flush after
-  // the previous one, so two lanes never write the ledger file concurrently.
-  let persisting: Promise<unknown> = Promise.resolve();
-  const persist = (): Promise<unknown> => {
-    // The chain is the mutex: appending with .then() serializes flushes.
-    // oxlint-disable-next-line promise/prefer-await-to-then
-    persisting = persisting.then(() => options.persistLedger?.());
-    return persisting;
-  };
+  // The persist mutex: ledger flushes from concurrent lanes are serialized so
+  // two lanes never write the ledger file at the same time.
+  const persistLimit = pLimit(1);
+  const persist = (): Promise<boolean | undefined> =>
+    persistLimit(() => options.persistLedger?.());
 
-  let nextIndex = 0;
-  const worker = async (): Promise<void> => {
-    while (nextIndex < items.length) {
-      const index = nextIndex;
-      nextIndex += 1;
-      const item = items[index] as WorkItem;
+  const results = await pMap(
+    items,
+    async (item: WorkItem, index): Promise<TranslateItemResult> => {
       options.onProgress?.({
         index,
         item,
         kind: "item-start",
         total: items.length,
       });
-      // oxlint-disable-next-line no-await-in-loop -- each worker is a serial lane
       const result = await (item.kind === "page"
         ? runPageItem(item, index, context, options.ledger)
         : runMetaItem(item, index, context, options.ledger));
-      results[index] = result;
-      // Flush this item's stamps before claiming the next one, so a kill
-      // loses at most the in-flight items.
-      // oxlint-disable-next-line no-await-in-loop
+      // Flush this item's stamps before the slot frees for the next item, so
+      // a kill loses at most the in-flight items.
       await persist();
       options.onProgress?.({
         index,
@@ -320,9 +310,10 @@ export const runTranslate = async (
         result,
         total: items.length,
       });
-    }
-  };
-  await Promise.all(Array.from({ length: concurrency }, () => worker()));
+      return result;
+    },
+    { concurrency }
+  );
 
   const diagnostics: Diagnostic[] = [];
   for (const result of results) {
@@ -331,11 +322,11 @@ export const runTranslate = async (
     }
   }
 
-  const counts: Record<TranslateItemStatus, number> = {
+  const counts = {
     failed: 0,
     partial: 0,
     translated: 0,
-  };
+  } satisfies Record<TranslateItemStatus, number>;
   for (const result of results) {
     counts[result.status] += 1;
   }

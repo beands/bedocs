@@ -9,6 +9,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { createServer } from "node:net";
+import type { AddressInfo } from "node:net";
 
 import { dirname, join } from "pathe";
 
@@ -58,7 +59,7 @@ export default {
 };
 `;
 
-const fixtureFiles = (labels: string[]): Record<string, string> => ({
+const fixtureFiles = (labels: string[]) => ({
   "blume.config.ts": configSource(labels),
   "docs/index.md": "# Home\n",
   "node_modules/site-integration/index.mjs": integrationPackage,
@@ -213,12 +214,16 @@ const waitForQuiescentMarkers = async (
   return settle(startingLines.length);
 };
 
+const isAddressInfo = (
+  value: AddressInfo | string | null
+): value is AddressInfo => Boolean(value) && typeof value !== "string";
+
 const availablePort = async (): Promise<number> => {
   const server = createServer();
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const address = server.address();
-  const port = address && typeof address !== "string" ? address.port : null;
+  const port = isAddressInfo(address) ? address.port : null;
   const closed = once(server, "close");
   server.close();
   await closed;
@@ -341,7 +346,7 @@ const runCli = async (
     }
     const [stdout, stderr] = await drainOutput(outputText);
     throw new CliTimeoutError(
-      `\`blume ${args.join(" ")}\` did not exit within ${timeout}ms\n${stdout}\n${stderr}`
+      `\`bedocs ${args.join(" ")}\` did not exit within ${timeout}ms\n${stdout}\n${stderr}`
     );
   }
   const [stdout, stderr] = await drainOutput(outputText);
@@ -349,24 +354,44 @@ const runCli = async (
 };
 
 /**
- * `blume build --isolated` on CI occasionally wedges after Astro logs
+ * `bedocs build --isolated` on CI occasionally wedges after Astro logs
  * `Complete!`: the build succeeds but the process never exits, and without a
  * guard the runner kills it at the test timeout (exit 143) — the build-side
  * sibling of the dev startup wedge above. Kill the hung process and rebuild
  * once; a persistent hang still surfaces after the retry.
+ *
+ * A second CI flake lives in Astro's fonts pipeline: the default theme fonts
+ * download from Google at build time, and Google's CSS API occasionally hands
+ * out gstatic URLs that 404 mid-rollout, failing the build with
+ * `CannotFetchFontFile`. Drop the runtime's font cache (a cached stale URL
+ * list would just re-404) and rebuild once; a real outage still surfaces
+ * after the retry.
  */
 const runIsolatedBuild = async (
   root: string,
   attemptsLeft = 2
 ): Promise<{ exitCode: number; output: string }> => {
+  let result: { exitCode: number; output: string };
   try {
-    return await runCli(root, ["build", "--isolated"], 90_000);
+    result = await runCli(root, ["build", "--isolated"], 90_000);
   } catch (error) {
     if (!(error instanceof CliTimeoutError) || attemptsLeft <= 1) {
       throw error;
     }
     return runIsolatedBuild(root, attemptsLeft - 1);
   }
+  if (
+    result.exitCode !== 0 &&
+    result.output.includes("CannotFetchFontFile") &&
+    attemptsLeft > 1
+  ) {
+    await rm(join(root, ".blume-verify/.astro/fonts"), {
+      force: true,
+      recursive: true,
+    });
+    return runIsolatedBuild(root, attemptsLeft - 1);
+  }
+  return result;
 };
 
 afterAll(async () => {
@@ -385,6 +410,8 @@ it("runs configured integrations in order for build and dev, regenerates once on
   let lines = await markerLines(root);
   expectPair(lines, "config", initial);
   expectPair(lines, "build", initial);
+  // SAFETY: the generated runtime package.json always declares a
+  // `dependencies` map (generate.ts writes one unconditionally).
   const runtimePackage = JSON.parse(
     await readFile(join(root, ".blume-verify/package.json"), "utf-8")
   ) as { dependencies: Record<string, string> };
@@ -407,6 +434,7 @@ it("runs configured integrations in order for build and dev, regenerates once on
       configSource(updated),
       "utf-8"
     );
+    // SAFETY: the expect above already failed the test if hashBefore is null.
     await waitForConfigHashChange(root, hashBefore as string);
     await waitForMarkerCount(root, markerCountBefore + 1);
     const settledMarkers = await waitForQuiescentMarkers(root);

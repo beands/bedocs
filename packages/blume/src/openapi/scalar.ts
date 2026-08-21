@@ -4,6 +4,7 @@ import { isAbsolute, join } from "pathe";
 
 import { scalarReferenceTemplate } from "../astro/templates.ts";
 import type { ResolvedConfig } from "../core/schema.ts";
+import { trimChar } from "../core/trim.ts";
 import { resolveAccent, resolveRadius } from "../theme/palette.ts";
 import { resolveReferences } from "./references.ts";
 import type { ReferenceSource } from "./references.ts";
@@ -24,17 +25,14 @@ export interface ReferenceFile {
 }
 
 const URL_SPEC = /^https?:\/\//u;
-const ROUTE_EDGES = /^\/+|\/+$/gu;
 
 /** The `src/pages`-relative file path for a reference route. */
 const referencePagePath = (route: string): string => {
-  const segments = route.replace(ROUTE_EDGES, "");
+  const segments = trimChar(route, "/");
   return `${segments === "" ? "index" : segments}.astro`;
 };
 
-const darkModeConfig = (
-  mode: ResolvedConfig["theme"]["mode"]
-): Record<string, boolean> => {
+const darkModeConfig = (mode: ResolvedConfig["theme"]["mode"]) => {
   if (mode === "dark") {
     return { darkMode: true };
   }
@@ -51,10 +49,7 @@ const darkModeConfig = (
  * `customCss`. Scalar re-injects `customCss` after its bundled theme, so these
  * variables reliably override the defaults. Best-effort, not pixel-exact.
  */
-const themeConfiguration = (
-  config: ResolvedConfig,
-  override?: string
-): Record<string, unknown> => {
+const themeConfiguration = (config: ResolvedConfig, override?: string) => {
   if (override) {
     return { theme: override };
   }
@@ -70,7 +65,10 @@ const themeConfiguration = (
 const specConfiguration = async (
   spec: string,
   root: string
-): Promise<{ config: Record<string, unknown>; warning?: string }> => {
+): Promise<{
+  config: { content: string } | { url: string };
+  warning?: string;
+}> => {
   if (URL_SPEC.test(spec)) {
     return { config: { url: spec } };
   }

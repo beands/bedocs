@@ -1,12 +1,14 @@
 import type { AstroIntegration } from "astro";
 import type { z } from "zod";
 
+import type { AskRetrievalOptions } from "../ai/ask-context.ts";
 import type { ComponentMarkdown } from "../ai/component-markdown.ts";
 import type { CodeTheme } from "../markdown/themes.ts";
 import type { FontSlug } from "../theme/fonts.ts";
 import type {
   blumeConfigSchema,
   OpenApiSource,
+  OpenInChatProvider,
   SearchProvider,
   SidebarDisplay,
   SidebarItemConfig,
@@ -15,7 +17,7 @@ import type { ContentSource } from "./sources/types.ts";
 import type { StandardSchema } from "./standard-schema.ts";
 
 /**
- * The public, hand-documented authoring type for `bedocs.config.ts`.
+ * The public, hand-documented authoring type for `blume.config.ts`.
  *
  * This interface mirrors the input side of {@link blumeConfigSchema} — the Zod
  * schema is still the single source of validation truth, but the schema's
@@ -179,7 +181,7 @@ export interface SanitySource {
   apiVersion?: string;
   /** Dataset name to query. */
   dataset: string;
-  /** Field paths mapping a document onto BeDocs meta + body. */
+  /** Field paths mapping a document onto Blume meta + body. */
   fields?: {
     /** Field holding the renderable body (Portable Text or Markdown). */
     body?: string;
@@ -205,13 +207,15 @@ export interface SanitySource {
 /** A Notion database; pages become entries, blocks become MDX. */
 export interface NotionSource {
   type: "notion";
+  /** Max concurrent Notion API requests; default 3 (Notion's per-integration pace). */
+  concurrency?: number;
   /** Notion database id. */
   database: string;
   /** Opt-in dev polling interval (seconds); omit to freeze for the session. */
   pollInterval?: number;
   /** Namespaces this source's routes under `/<prefix>/`. */
   prefix?: string;
-  /** Notion property names mapped onto BeDocs meta. */
+  /** Notion property names mapped onto Blume meta. */
   properties?: {
     /** Property holding the page description. */
     description?: string;
@@ -508,7 +512,7 @@ export type FontInput =
 export interface FontsConfig {
   /** Body / prose font. Defaults to `inter`. */
   body?: FontInput;
-  /** Display / heading font. Defaults to `inter-tight`. */
+  /** Display / heading font. Defaults to `inter` (shared with the body). */
   display?: FontInput;
   /** Monospace / code font. Defaults to `ibm-plex-mono`. */
   mono?: FontInput;
@@ -634,6 +638,28 @@ export interface AskSuggestion {
 type AskProviderGateway = "gateway" | "openrouter" | "llmgateway";
 type AskProvider = AskProviderGateway | "inkeep" | "openai-compatible";
 
+/** How much retrieved documentation each Ask AI question carries. */
+export interface AskRetrievalConfig {
+  /**
+   * Total injected documentation characters, across all excerpts. Defaults to
+   * `10000`. The single biggest lever on time-to-first-token — the model reads
+   * every injected character before it emits a token.
+   */
+  contextBudget?: number;
+  /**
+   * Characters kept per excerpt. Defaults to `2000`. Raise it when one long
+   * page holds the whole answer (a table the excerpt cuts in half); the
+   * `contextBudget` still caps the total.
+   */
+  excerptChars?: number;
+  /**
+   * Documents retrieved per question. Defaults to `6`. The page the reader is
+   * viewing is injected on top of the retrieved ones, so an answer can cite up
+   * to one page more than this.
+   */
+  maxResults?: number;
+}
+
 export interface AskConfig {
   /**
    * Name of the env var holding the provider API key. Each provider has a
@@ -649,14 +675,26 @@ export interface AskConfig {
   enabled?: boolean;
   /**
    * Existing Ask AI endpoint to call instead of generating one. This keeps a
-   * BeDocs site static while an API backend owns retrieval, model access, rate
+   * Blume site static while an API backend owns retrieval, model access, rate
    * limiting, and streaming. Accepts an absolute URL or root-relative path.
    */
   endpoint?: string;
+  /**
+   * Extra system-prompt text appended to the built-in instructions — use it
+   * for identity, language, or tone. The built-in grounding behavior (answer
+   * from the retrieved excerpts, cite pages as Markdown links) is preserved.
+   */
+  instructions?: string;
   /** Model id to use. Defaults to `openai/gpt-5.5`. */
   model?: string;
   /** Which backend routes the request. Defaults to `gateway`. */
   provider?: AskProvider;
+  /**
+   * How much documentation each question carries into the model's prompt.
+   * Lower values cut time-to-first-token — which dominates on a self-hosted
+   * backend — at the cost of recall. Defaults keep the built-in behavior.
+   */
+  retrieval?: AskRetrievalConfig;
   /** Starter prompts shown before the first question. */
   suggestions?: AskSuggestion[];
 }
@@ -706,7 +744,7 @@ export interface AiConfig {
    * replacement Markdown — or `null` to leave the JSX verbatim. A same-name
    * entry replaces a built-in serializer.
    *
-   * These live in `bedocs.config.ts` (which is executed at build time), not in
+   * These live in `blume.config.ts` (which is executed at build time), not in
    * `components.tsx` (which is only statically analyzed, never run).
    *
    * ```ts
@@ -720,6 +758,19 @@ export interface AiConfig {
   markdownComponents?: Record<string, ComponentMarkdown>;
   /** Expose the docs as an MCP server for agents. */
   mcp?: McpConfig;
+  /**
+   * The "Open in chat" page action, which opens the current page in an AI
+   * assistant pre-filled with a prompt pointing at its raw Markdown.
+   * Defaults to `true` (every provider). Set `false` to hide the action, or
+   * list a subset of providers to show, in order.
+   *
+   * ```ts
+   * ai: {
+   *   openInChat: ["claude", "chatgpt", "cursor"],
+   * }
+   * ```
+   */
+  openInChat?: boolean | OpenInChatProvider[];
   /**
    * Publish Agent Skills for discovery: a directory (resolved against the
    * project root) whose subdirectories each hold a `SKILL.md`. Skills are
@@ -753,6 +804,7 @@ export interface AiConfig {
 /** Web Bot Auth signature directory. Off until at least one key is listed. */
 export interface WebBotAuthConfig {
   /** Public JWKs to publish (e.g. an Ed25519 key: `kty: "OKP"`, `crv: "Ed25519"`, `x: …`). */
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- mirrors the schema's `z.record(z.unknown())` (the drift guard requires it); JWK parameters are validated at parse time, not typed.
   keys?: Record<string, unknown>[];
 }
 
@@ -808,12 +860,12 @@ export interface LocaleConfigInput {
 }
 
 /**
- * Internationalization. Opt-in: when omitted, BeDocs is single-locale. The
+ * Internationalization. Opt-in: when omitted, Blume is single-locale. The
  * default locale lives at the content root; other locales are top-level
  * directories named by `code` (the `dir` parser) or filename suffixes (`dot`).
  */
 export interface I18nConfig {
-  /** Locale rendered at the content root. Defaults to `ru`. */
+  /** Locale rendered at the content root. Defaults to `en`. */
   defaultLocale?: string;
   /** Locale rendered for a missing translation; `null` disables fallback. */
   fallbackLocale?: string | null;
@@ -828,6 +880,59 @@ export interface I18nConfig {
    * `{ fr: { search: { button: "Rechercher" } } }`.
    */
   ui?: Record<string, Record<string, Record<string, string>>>;
+}
+
+// ---------------------------------------------------------------------------
+// Versions
+// ---------------------------------------------------------------------------
+
+/** A frozen documentation snapshot: a directory under the content root. */
+export interface ArchivedVersionInput {
+  /**
+   * The "you're viewing an old version" notice: `true` (default) for the
+   * built-in message, a string for custom copy, `false` to hide it.
+   */
+  banner?: boolean | string;
+  /**
+   * Where this version's pages point their canonical URL. `latest` (default)
+   * targets the same page in the current docs when it still exists (self
+   * otherwise); `self` keeps every page authoritative.
+   */
+  canonical?: "latest" | "self";
+  /**
+   * Directory name under the content root, and the URL segment. Must start
+   * with a letter (e.g. `v1.0`).
+   */
+  id: string;
+  /** Switcher label; defaults to the id. */
+  label?: string;
+  /** Emit `noindex` on every page of this version. Defaults to `false`. */
+  noindex?: boolean;
+}
+
+/**
+ * Docs versioning. Opt-in: the latest docs live at the content root with
+ * unprefixed URLs, and each archived version is a frozen snapshot directory
+ * (`content/docs/<id>/`) cut with `bedocs version <id>`. Archived means frozen:
+ * snapshots carry their own translations and are never retranslated.
+ */
+export interface VersionsConfig {
+  /** Frozen snapshots, newest first — this order is the switcher order. */
+  archived?: ArchivedVersionInput[];
+  /** Labels the unprefixed tree (the latest docs) in the switcher. */
+  current: {
+    /** Small tag rendered next to the label (e.g. `Latest`). */
+    badge?: string;
+    label: string;
+  };
+  switcher?: {
+    /**
+     * Where switching lands when the page has no equivalent in the target
+     * version: `same-page` (default) goes to the equivalent when it exists
+     * (version root otherwise); `root` always goes to the version root.
+     */
+    redirect?: "same-page" | "root";
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1104,28 +1209,33 @@ export interface ReactConfig {
 // ---------------------------------------------------------------------------
 
 /**
- * OpenAPI reference. By default (`renderer: "blume"`) BeDocs renders its own UI:
- * one real page per operation, grouped by tag in the sidebar and included in
- * search, llms.txt, and OG. Set `renderer: "scalar"` for the embedded Scalar
- * SPA (a single self-contained route).
+ * The shared shape of both API-reference blocks (`openapi`, `asyncapi`). Only
+ * the per-block defaults differ; those are documented on the extending
+ * interfaces.
  */
-export interface OpenApiConfig {
-  /** Code-sample languages shown per operation (BeDocs renderer). */
-  codeSamples?: string[];
+interface ReferenceConfig {
   /** Turn the reference on. Defaults to `false`. */
   enabled?: boolean;
-  /** Start nested schema rows expanded (BeDocs renderer). Defaults to `false`. */
+  /** Start nested schema rows expanded (Blume renderer). Defaults to `false`. */
   expandSchemas?: boolean;
+  /**
+   * The interactive "Try it" panel on operation pages (Blume renderer). On by
+   * default; `false` hides it. `proxy` is the CORS escape hatch the OpenAPI
+   * Send button routes requests through: a proxy URL, or `true` for the
+   * built-in `/_api-proxy` endpoint (which requires
+   * `deployment.output: "server"`). `proxy` is OpenAPI-only — an event
+   * composer's WebSocket connect is direct.
+   */
+  playground?: boolean | { enabled?: boolean; proxy?: boolean | string };
   /** Who renders the reference. Defaults to `blume`. */
   renderer?: "blume" | "scalar";
-  /** Where the reference mounts. Defaults to `/reference`. */
-  route?: string;
   /**
    * Extra Scalar options forwarded verbatim to the embedded `<ScalarComponent>`
    * (Scalar renderer only) — e.g. `localization`, `agent`,
    * `hideTestRequestButton`, `orderSchemaPropertiesBy`. These win over Blume's
    * derived spec/theme config, so it's a full escape hatch to Scalar's API.
    */
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- mirrors the schema's `z.record(z.unknown())` (the drift guard requires it); the values are Scalar's own API surface, deliberately unmodeled.
   scalar?: Record<string, unknown>;
   /** One or more specs; each renders on its own route by default. */
   sources?: OpenApiSource[];
@@ -1136,27 +1246,36 @@ export interface OpenApiConfig {
 }
 
 /**
- * AsyncAPI reference, rendered via the embedded Scalar SPA (which auto-detects
- * the document type). Same shape as {@link OpenApiConfig}; only the default
- * `route` differs.
+ * OpenAPI reference. By default (`renderer: "blume"`) Blume renders its own UI:
+ * one real page per operation, grouped by tag in the sidebar and included in
+ * search, llms.txt, and OG. Set `renderer: "scalar"` for the embedded Scalar
+ * SPA (a single self-contained route).
  */
-export interface AsyncApiConfig {
-  /** Turn the reference on. Defaults to `false`. */
-  enabled?: boolean;
+export interface OpenApiConfig extends ReferenceConfig {
+  /**
+   * Code-sample languages shown per operation (Blume renderer). Defaults to
+   * `["curl", "js", "python"]`.
+   */
+  codeSamples?: string[];
+  /** Where the reference mounts. Defaults to `/reference`. */
+  route?: string;
+}
+
+/**
+ * AsyncAPI reference. Same shape as {@link OpenApiConfig}: by default
+ * (`renderer: "blume"`) Blume normalizes the spec to AsyncAPI 3.x and renders
+ * its own UI — one real page per operation, grouped by tag (or channel) in the
+ * sidebar and included in search, llms.txt, and OG. Set `renderer: "scalar"`
+ * for the embedded Scalar SPA (a single self-contained route).
+ */
+export interface AsyncApiConfig extends ReferenceConfig {
+  /**
+   * Code-sample tools shown per operation (Blume renderer). Defaults to every
+   * tool appropriate to the operation's protocol binding.
+   */
+  codeSamples?: string[];
   /** Where the reference mounts. Defaults to `/events`. */
   route?: string;
-  /**
-   * Extra Scalar options forwarded verbatim to the embedded `<ScalarComponent>`.
-   * These win over Blume's derived spec/theme config — a full escape hatch to
-   * Scalar's API.
-   */
-  scalar?: Record<string, unknown>;
-  /** One or more specs. */
-  sources?: OpenApiSource[];
-  /** Shorthand for a single source. */
-  spec?: string;
-  /** Scalar theme name. */
-  theme?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -1285,8 +1404,8 @@ export type TocConfig =
 // ---------------------------------------------------------------------------
 
 /**
- * A BeDocs site's configuration — the object passed to {@link defineConfig} in
- * `bedocs.config.ts`. Every field is optional; an empty config renders the
+ * A Blume site's configuration — the object passed to {@link defineConfig} in
+ * `blume.config.ts`. Every field is optional; an empty config renders the
  * Markdown/MDX under `docs/` with sensible defaults.
  */
 export interface BlumeConfig {
@@ -1294,7 +1413,7 @@ export interface BlumeConfig {
   ai?: AiConfig;
   /** Analytics providers (PostHog, Vercel, or arbitrary scripts). */
   analytics?: AnalyticsConfig;
-  /** AsyncAPI reference (embedded Scalar renderer). */
+  /** AsyncAPI reference (native renderer by default, Scalar opt-out). */
   asyncapi?: AsyncApiConfig;
   /** Site-wide announcement banner shown above the header. */
   banner?: BannerConfig;
@@ -1367,6 +1486,8 @@ export interface BlumeConfig {
   title?: string;
   /** On-page table of contents. Defaults to on (H2–H3). */
   toc?: TocConfig;
+  /** Docs versioning (opt-in frozen snapshots with a version switcher). */
+  versions?: VersionsConfig;
 }
 
 // ---------------------------------------------------------------------------
@@ -1395,4 +1516,18 @@ type _NoExtraOrMissingKeys = AssertExtends<
   | Exclude<keyof BlumeConfig, keyof SchemaInput>
   | Exclude<keyof SchemaInput, keyof BlumeConfig>,
   never
+>;
+// The retrieval shape lives in three places: this documented config interface,
+// the schema, and the runtime `AskRetrievalOptions` that `createAskContext`
+// reads (all-optional, so plain assignability is a weak-type check that a
+// renamed field slips through — the value would be baked into the generated
+// endpoint and silently ignored at request time). `Required` makes a rename in
+// either copy a missing property, which stops compiling.
+type _AskRetrievalMatchesRuntime = AssertExtends<
+  Required<AskRetrievalConfig>,
+  Required<AskRetrievalOptions>
+>;
+type _AskRuntimeMatchesRetrieval = AssertExtends<
+  Required<AskRetrievalOptions>,
+  Required<AskRetrievalConfig>
 >;

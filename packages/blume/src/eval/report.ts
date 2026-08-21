@@ -6,39 +6,26 @@ import type { ColorFunction } from "consola/utils";
 import { join, relative } from "pathe";
 
 import { AGENTS } from "../audit/agent.ts";
+import { duration, money, seconds } from "../cli/report-format.ts";
 import { countBySeverity } from "../core/diagnostics.ts";
 import type { EvalResult, QuestionResult, QuestionStatus } from "./run.ts";
 
-const GLYPH: Record<QuestionStatus, string> = {
+const GLYPH = {
   error: "!",
   fail: "✖",
   pass: "✔",
   skip: "⊘",
-};
+} satisfies Record<QuestionStatus, string>;
 
-const STATUS_COLOR: Record<QuestionStatus, ColorFunction> = {
+const STATUS_COLOR = {
   error: colors.yellow,
   fail: colors.red,
   pass: colors.green,
   skip: colors.dim,
-};
+} satisfies Record<QuestionStatus, ColorFunction>;
 
 /** Longest id gets the room; everything shorter aligns to it. */
 const ID_PAD = 28;
-
-const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)}s`;
-
-const money = (cost: number | undefined): string =>
-  cost === undefined ? "" : `$${cost.toFixed(2)}`;
-
-const duration = (ms: number): string => {
-  if (ms < 60_000) {
-    return seconds(ms);
-  }
-  const minutes = Math.floor(ms / 60_000);
-  const rest = Math.round((ms % 60_000) / 1000);
-  return `${minutes}m ${rest}s`;
-};
 
 /** One question's progress/report line: glyph, id, status, score, time, cost. */
 export const questionLine = (result: QuestionResult): string => {

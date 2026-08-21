@@ -8,6 +8,30 @@ import type { PageSnapshot, SnapshotAsset, SnapshotLink } from "./types.ts";
 /** Site chrome: links here are navigation, not editorial. */
 const CHROME = "nav, aside, header, footer";
 
+/**
+ * Count prose words with `Intl.Segmenter`, seeded with the page's declared
+ * language. The whitespace split this replaces counted a fully written
+ * Japanese or Chinese page — scripts with no interword spaces — as a handful
+ * of "words", tripping BLUME_AUDIT_LOW_WORD_COUNT on every page of a CJK
+ * site. An unparseable `lang` attribute falls back to the default locale
+ * rather than failing the crawl.
+ */
+const countWords = (prose: string, lang: string | null): number => {
+  let segmenter: Intl.Segmenter;
+  try {
+    segmenter = new Intl.Segmenter(lang ?? undefined, { granularity: "word" });
+  } catch {
+    segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
+  }
+  let count = 0;
+  for (const segment of segmenter.segment(prose)) {
+    if (segment.isWordLike) {
+      count += 1;
+    }
+  }
+  return count;
+};
+
 /** Where a page's prose lives, in preference order. */
 const CONTENT_ROOTS = ["main", "article", "body"];
 
@@ -60,9 +84,7 @@ const collectAssets = (
     .filter((asset) => asset.src.length > 0);
 
 /** Parse each JSON-LD block, keeping the parse failures rather than dropping them. */
-const collectJsonLd = (
-  document: HtmlDocument
-): { jsonld: unknown[]; jsonldErrors: string[] } => {
+const collectJsonLd = (document: HtmlDocument) => {
   const jsonld: unknown[] = [];
   const jsonldErrors: string[] = [];
   for (const script of document.querySelectorAll(
@@ -82,7 +104,7 @@ const prefixedMeta = (
   document: HtmlDocument,
   keyAttr: "property" | "name",
   prefix: string
-): Record<string, string> => {
+) => {
   const found: Record<string, string> = {};
   for (const element of document.querySelectorAll(
     `meta[${keyAttr}^="${prefix}"]`
@@ -123,6 +145,7 @@ export const buildSnapshot = (options: {
   const root = contentRoot(document);
   const prose = root ? visibleText(root) : "";
   const robots = document.querySelector('meta[name="robots"]');
+  const lang = attr(document.querySelector("html") ?? document, "lang");
   const { jsonld, jsonldErrors } = collectJsonLd(document);
 
   return {
@@ -160,7 +183,7 @@ export const buildSnapshot = (options: {
     indexable: !robots?.getAttribute("content")?.includes("noindex"),
     jsonld,
     jsonldErrors,
-    lang: attr(document.querySelector("html") ?? document, "lang"),
+    lang,
     links,
     metaRefresh:
       document
@@ -184,6 +207,6 @@ export const buildSnapshot = (options: {
         .querySelector('meta[name="viewport"]')
         ?.getAttribute("content")
         ?.trim() ?? null,
-    wordCount: prose ? prose.split(/\s+/u).length : 0,
+    wordCount: countWords(prose, lang),
   };
 };

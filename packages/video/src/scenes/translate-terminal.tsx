@@ -11,7 +11,7 @@ import {
 // The two translate frosted-card scenes, sharing one card frame so the config
 // cuts to the terminal without the stage changing shape:
 //   TranslateConfig — the `i18n` block lands in blume.config.ts, line by line.
-//   TranslateRun — `blume translate --codex` streams the per-item results
+//   TranslateRun — `bedocs translate --codex` streams the per-item results
 //   (glyph, `source → locale`, time, spend — exactly the shape the real CLI
 //   prints from itemEndLine in packages/blume/src/translate/report.ts).
 
@@ -139,7 +139,7 @@ const item = (
 ): TermLine => ({ cost, delay, kind: "item", locale, source, time });
 
 const RUN_LINES: TermLine[] = [
-  { delay: 16, kind: "cmd", text: "blume translate --codex" },
+  { delay: 16, kind: "cmd", text: "bedocs translate --codex" },
   { delay: 10, kind: "blank" },
   { delay: 0, kind: "header", meta: HEADER_META },
   { delay: 4, kind: "blank" },

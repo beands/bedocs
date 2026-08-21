@@ -1,4 +1,9 @@
-import type { FrontmatterExtend, ResolvedI18nConfig } from "../schema.ts";
+import type {
+  FolderMeta,
+  FrontmatterExtend,
+  ResolvedI18nConfig,
+  ResolvedVersionsConfig,
+} from "../schema.ts";
 import type { Diagnostic } from "../types.ts";
 
 /**
@@ -11,7 +16,8 @@ export interface SourceEntry {
   ref: string;
   /** Logical route input; defaults to `ref` if omitted. May include slashes. */
   slug?: string;
-  /** Frontmatter-equivalent metadata, validated against the BeDocs meta schema. */
+  /** Frontmatter-equivalent metadata, validated against the Blume meta schema. */
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- pre-validation frontmatter from YAML/CMS payloads; the meta schema parses it downstream
   data: Record<string, unknown>;
   /** The renderable body as Markdown/MDX source text (frontmatter stripped). */
   body: { format: "md" | "mdx"; text: string };
@@ -40,6 +46,14 @@ export interface SourceLoadResult {
   entries: SourceEntry[];
   /** Source-level diagnostics (e.g. an offline cache fallback warning). */
   diagnostics: Diagnostic[];
+  /**
+   * Folder meta the source derives for the sidebar groups its entries create,
+   * keyed by locale-stripped group path (the `meta.ts` key space). The OpenAPI
+   * source labels each tag directory with the spec's own tag name, so the
+   * sidebar shows `OAuth2`/`Größe` instead of a re-humanized slug. Merged
+   * beneath user-authored meta files, which always win.
+   */
+  folderMeta?: Record<string, FolderMeta>;
 }
 
 /**
@@ -48,7 +62,7 @@ export interface SourceLoadResult {
  */
 export interface SourceContext {
   projectRoot: string;
-  /** Per-source cache dir under `.bedocs/cache/<source>/`. */
+  /** Per-source cache dir under `.blume/cache/<source>/`. */
   cacheDir: string;
   mode: "dev" | "build";
   /** Dir for downloaded assets (served from the site's public dir). */
@@ -79,7 +93,7 @@ export interface ContentSource {
   /**
    * Whether entries render through the staging collection. Filesystem sources
    * render through Astro's existing `docs` glob collection (`false`); every
-   * other source materializes MDX into `.bedocs/content` (`true`).
+   * other source materializes MDX into `.blume/content` (`true`).
    */
   readonly staged: boolean;
   /** Optional route prefix; the source's routes namespace under `/<prefix>/`. */
@@ -117,4 +131,6 @@ export interface NormalizeContext {
    * applied to a page only when its resolved `type` matches.
    */
   typeFrontmatter?: Record<string, FrontmatterExtend>;
+  /** Docs versioning config; a leading archived-version dir becomes the page's version. */
+  versions?: ResolvedVersionsConfig;
 }

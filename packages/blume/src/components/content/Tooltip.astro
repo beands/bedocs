@@ -2,6 +2,7 @@
 import { randomUUID } from "node:crypto";
 
 import { contentHref } from "./base-href.ts";
+import { unwrapParagraph } from "./inline-markdown.ts";
 
 interface Props {
   cta?: string;
@@ -13,15 +14,6 @@ interface Props {
 const { cta, headline, href, tip } = Astro.props;
 const tooltipId = `blume-tooltip-${randomUUID()}`;
 const external = href?.startsWith("http");
-
-const unwrapParagraph = (html: string): string => {
-  const trimmed = html.trim();
-  // Only a *single* paragraph is unwrapped: the content must not contain its
-  // own `</p>`, or `<p>a</p>\n<p>b</p>` would "unwrap" to `a</p>\n<p>b` —
-  // unbalanced HTML injected via set:html.
-  const match = trimmed.match(/^<p>(?<content>(?:(?!<\/p>)[\s\S])*)<\/p>$/u);
-  return match?.groups?.content ?? trimmed;
-};
 
 const labelHtml = Astro.slots.has("default")
   ? unwrapParagraph(await Astro.slots.render("default"))

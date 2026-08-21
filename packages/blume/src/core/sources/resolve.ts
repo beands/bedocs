@@ -86,6 +86,7 @@ const buildSource = (
   if (def.type === "notion") {
     return notionSource(
       {
+        concurrency: def.concurrency,
         database: def.database,
         name,
         pollInterval: def.pollInterval,

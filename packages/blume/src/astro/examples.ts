@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 
+import pMap from "p-map";
 import { join, relative } from "pathe";
 import { glob } from "tinyglobby";
 
@@ -32,7 +33,11 @@ export interface ExampleDiscovery {
 }
 
 /** Example extensions mapped to the framework that renders them. */
-const FRAMEWORK_BY_EXT: Record<string, ExampleFramework> = {
+interface FrameworkByExtension {
+  [extension: string]: ExampleFramework;
+}
+
+const FRAMEWORK_BY_EXT: FrameworkByExtension = {
   astro: "astro",
   jsx: "react",
   svelte: "svelte",
@@ -48,6 +53,9 @@ const EXAMPLE_FILE = /\.(?<ext>astro|jsx|svelte|tsx|vue)$/u;
 // Renderable example files when `examples` names a plain directory.
 const DEFAULT_EXAMPLE_GLOB = "**/*.{astro,jsx,svelte,tsx,vue}";
 
+/** Ceiling on concurrent example-file reads; unbounded fan-out risks EMFILE. */
+const READ_CONCURRENCY = 16;
+
 // Glob magic that turns `examples` from a plain directory into a pattern. `()`,
 // `@`, and `+` are excluded so literal path segments (npm scopes, parens) keep
 // resolving as directories; the extglob leads `*?!` still trigger here.
@@ -58,7 +66,7 @@ const GLOB_MAGIC = /[!*?[\]{}]/u;
  * discovered files can be keyed relative to that prefix (e.g.
  * `registry/x/**\/examples/*` → `{ base: "registry/x", rest: "**\/examples/*" }`).
  */
-const splitGlobBase = (pattern: string): { base: string; rest: string } => {
+const splitGlobBase = (pattern: string) => {
   const segments = pattern.split("/");
   // Only called when the pattern contains glob magic (see the caller), and `/`
   // is never magic, so the magic char always lands in a segment — `findIndex`
@@ -102,9 +110,9 @@ export const discoverExamples = async (
     onlyFiles: true,
   });
   const files = matches.toSorted();
-  const sources = await Promise.all(
-    files.map((file) => readFile(file, "utf-8"))
-  );
+  const sources = await pMap(files, (file) => readFile(file, "utf-8"), {
+    concurrency: READ_CONCURRENCY,
+  });
 
   const examples: ExampleSpec[] = [];
   const warnings: string[] = [];

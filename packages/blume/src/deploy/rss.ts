@@ -4,6 +4,7 @@ import { escape as escapeXml } from "html-escaper";
 
 import { normalizeBasePath, withBasePath } from "../core/base-path.ts";
 import type { BlumeProject } from "../core/project-graph.ts";
+import { siteRoot } from "../core/site-url.ts";
 import type { PageRecord } from "../core/types.ts";
 
 /** A single feed entry derived from a content page. */
@@ -55,7 +56,7 @@ export const buildRssFeeds = (project: BlumeProject): RssFeed[] => {
   if (!(rss.enabled && site)) {
     return [];
   }
-  const base = site.replace(/\/$/u, "");
+  const base = siteRoot(site);
   // Routes carry `basePath`; a `deployment.base` subdirectory is layered on top.
   // The feed's own `link`/self URL points at the docs root under that base, while
   // `path` stays base-less (it's also the on-disk output location).

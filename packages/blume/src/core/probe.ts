@@ -1,3 +1,5 @@
+import pMap from "p-map";
+
 import type { DiagnosticSeverity } from "./types.ts";
 
 export const PROBE_CONCURRENCY = 8;
@@ -113,24 +115,10 @@ export const probeAll = async (
   options: { concurrency?: number; timeoutMs?: number } = {}
 ): Promise<Map<string, ProbeResult>> => {
   const unique = [...new Set(urls)];
-  const results = new Map<string, ProbeResult>();
-  const limit = Math.min(
-    options.concurrency ?? PROBE_CONCURRENCY,
-    unique.length
+  const entries = await pMap(
+    unique,
+    async (url) => [url, await probe(url, options)] as const,
+    { concurrency: Math.max(1, options.concurrency ?? PROBE_CONCURRENCY) }
   );
-
-  let cursor = 0;
-  const worker = async (): Promise<void> => {
-    while (cursor < unique.length) {
-      const url = unique[cursor];
-      cursor += 1;
-      if (url !== undefined) {
-        // oxlint-disable-next-line no-await-in-loop -- bounded-concurrency pool
-        results.set(url, await probe(url, options));
-      }
-    }
-  };
-  await Promise.all(Array.from({ length: limit }, worker));
-
-  return results;
+  return new Map(entries);
 };

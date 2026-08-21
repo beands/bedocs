@@ -1,6 +1,8 @@
 ---
 import { EN_UI } from "../../core/i18n-ui.ts";
 import type { UIStrings } from "../../core/i18n-ui.ts";
+import { openInChatProviders } from "../../core/open-in-chat.ts";
+import type { OpenInChatProvider } from "../../core/open-in-chat.ts";
 import { GITHUB_MARK } from "../github-mark.ts";
 import Icon from "../Icon.astro";
 
@@ -15,12 +17,25 @@ interface Props {
   mcpUrl?: string | null;
   /** Display name of the MCP server (defaults to the site title). */
   mcpName?: string | null;
+  /**
+   * "Open in chat" providers to list, in order; an empty list hides the
+   * action, and omitting the prop shows every provider.
+   */
+  openInChat?: readonly OpenInChatProvider[];
   /** Localized action labels. */
   strings?: UIStrings["actions"];
 }
 
-const { route, editUrl, exportPdf, exportEpub, mcpUrl, mcpName, strings } =
-  Astro.props;
+const {
+  route,
+  editUrl,
+  exportPdf,
+  exportEpub,
+  mcpUrl,
+  mcpName,
+  openInChat,
+  strings,
+} = Astro.props;
 // Merge over the English defaults so a label missing from a translation (or from
 // a not-yet-regenerated snapshot) still renders instead of coming out blank.
 const a = { ...EN_UI.actions, ...strings };
@@ -44,19 +59,27 @@ const LOGOS: Record<string, string> = {
   v0: '<svg class="size-4 shrink-0" fill="currentColor" viewBox="0 0 147 70" xmlns="http://www.w3.org/2000/svg"><path d="M56 50.2031V14H70V60.1562C70 65.5928 65.5928 70 60.1562 70C57.5605 70 54.9982 68.9992 53.1562 67.1573L0 14H19.7969L56 50.2031Z"/><path d="M147 56H133V23.9531L100.953 56H133V70H96.6875C85.8144 70 77 61.1856 77 50.3125V14H91V46.1562L123.156 14H91V0H127.312C138.186 0 147 8.81439 147 19.6875V56Z"/></svg>',
 };
 
+/** Display names for the "Open in chat" providers. */
+const PROVIDER_NAMES: Record<OpenInChatProvider, string> = {
+  chatgpt: "ChatGPT",
+  claude: "Claude",
+  cursor: "Cursor",
+  scira: "Scira",
+  t3: "T3 Chat",
+  v0: "v0",
+};
+
 // Brand names stay verbatim; the surrounding "Open in" phrase localizes via
-// the `actions.openIn` template.
-const PROVIDERS = [
-  { key: "v0", name: "v0" },
-  { key: "chatgpt", name: "ChatGPT" },
-  { key: "claude", name: "Claude" },
-  { key: "t3", name: "T3 Chat" },
-  { key: "scira", name: "Scira" },
-  { key: "cursor", name: "Cursor" },
-].map((provider) => ({
-  ...provider,
-  label: a.openIn.replace("{name}", provider.name),
+// the `actions.openIn` template. `ai.openInChat` picks and orders the list;
+// an empty list hides the action entirely.
+const providers = (openInChat ?? openInChatProviders).map((key) => ({
+  key,
+  label: a.openIn.replace("{name}", PROVIDER_NAMES[key]),
 }));
+
+// The default list opens with v0 and separates it from the chat assistants;
+// keep that separator only while a configured list preserves v0 first.
+const chatSeparator = providers.length > 1 && providers[0]?.key === "v0";
 
 // Top-level actions match the ToC links: flat, no background/padding, color
 // shift on hover only.
@@ -134,41 +157,45 @@ const menuRowClass =
     )
   }
 
-  <details class="group relative">
-    <summary
-      class={`${rowClass} cursor-pointer list-none [&::-webkit-details-marker]:hidden`}
-    >
-      <Icon name="external-link" size={16} />
-      {a.openInChat}
-      <Icon
-        class="ms-auto transition-transform group-open:rotate-180"
-        name="chevron-down"
-        size={14}
-      />
-    </summary>
-    <div
-      class="absolute top-full right-2 z-50 mt-1 w-max min-w-[14rem] max-w-[22rem] rounded-blume border border-border bg-background p-1 shadow-xl"
-      data-blume-menu
-    >
-      {
-        PROVIDERS.map((provider, index) => (
-          <>
-            {index === 1 && <hr class="my-1 border-border border-t" />}
-            <a
-              class={menuRowClass}
-              data-open-in={provider.key}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <span set:html={LOGOS[provider.key]} />
-              <span class="flex-1">{provider.label}</span>
-              <Icon name="external-link" size={13} />
-            </a>
-          </>
-        ))
-      }
-    </div>
-  </details>
+  {
+    providers.length > 0 && (
+      <details class="group relative">
+        <summary
+          class={`${rowClass} cursor-pointer list-none [&::-webkit-details-marker]:hidden`}
+        >
+          <Icon name="external-link" size={16} />
+          {a.openInChat}
+          <Icon
+            class="ms-auto transition-transform group-open:rotate-180"
+            name="chevron-down"
+            size={14}
+          />
+        </summary>
+        <div
+          class="absolute top-full right-2 z-50 mt-1 w-max min-w-[14rem] max-w-[22rem] rounded-blume border border-border bg-background p-1 shadow-xl"
+          data-blume-menu
+        >
+          {providers.map((provider, index) => (
+            <>
+              {index === 1 && chatSeparator && (
+                <hr class="my-1 border-border border-t" />
+              )}
+              <a
+                class={menuRowClass}
+                data-open-in={provider.key}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <span set:html={LOGOS[provider.key]} />
+                <span class="flex-1">{provider.label}</span>
+                <Icon name="external-link" size={13} />
+              </a>
+            </>
+          ))}
+        </div>
+      </details>
+    )
+  }
 
   {
     mcpUrl && (
@@ -224,7 +251,9 @@ const menuRowClass =
 </div>
 
 <script>
+  import { copyText, flashLabel } from "../copy-feedback.ts";
   import { prefixBase } from "../islands/base-path.ts";
+  import { rafThrottle } from "../raf-throttle.ts";
 
   const CHAT_URLS: Record<string, (q: string) => string> = {
     chatgpt: (q) => `https://chatgpt.com/?hints=search&prompt=${q}`,
@@ -283,28 +312,51 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 2em 0; }`;
     return clone.innerHTML;
   };
 
-  const root = document.querySelector("[data-blume-page-actions]");
-  if (root) {
+  const placeMenu = (details: HTMLDetailsElement) => {
+    const menu = details.querySelector<HTMLElement>("[data-blume-menu]");
+    const summary = details.querySelector("summary");
+    if (!(menu && summary)) {
+      return;
+    }
+    const rect = summary.getBoundingClientRect();
+    const margin = 8;
+    const flipUp =
+      rect.bottom + menu.offsetHeight + margin > window.innerHeight &&
+      rect.top - menu.offsetHeight - margin > 0;
+    menu.classList.toggle("top-full", !flipUp);
+    menu.classList.toggle("mt-1", !flipUp);
+    menu.classList.toggle("bottom-full", flipUp);
+    menu.classList.toggle("mb-1", flipUp);
+  };
+
+  // rAF-coalesced so a live resize drag re-reads layout once per frame, not
+  // once per event, while the open menu still tracks the viewport. Registered
+  // once at module scope (this bundle runs once per real page load) and
+  // querying live, because client-router swaps replace the menu elements.
+  window.addEventListener(
+    "resize",
+    rafThrottle(() => {
+      const open = document.querySelector<HTMLDetailsElement>(
+        "[data-blume-page-actions] details[open]"
+      );
+      if (open) {
+        placeMenu(open);
+      }
+    })
+  );
+
+  // Per-page setup, run on the initial load and again after every
+  // client-router swap: the swap rebuilds the actions menu from
+  // server-rendered markup, so every handler below binds to fresh elements.
+  const initPageActions = () => {
+    const root = document.querySelector("[data-blume-page-actions]");
+    if (!root) {
+      return;
+    }
     // The action dropdowns are native <details>. Make them behave like a proper
     // menu: only one open at a time, and flip above the trigger when opening
     // downward would run past the viewport bottom.
     const dropdowns = [...root.querySelectorAll<HTMLDetailsElement>("details")];
-    const placeMenu = (details: HTMLDetailsElement) => {
-      const menu = details.querySelector<HTMLElement>("[data-blume-menu]");
-      const summary = details.querySelector("summary");
-      if (!(menu && summary)) {
-        return;
-      }
-      const rect = summary.getBoundingClientRect();
-      const margin = 8;
-      const flipUp =
-        rect.bottom + menu.offsetHeight + margin > window.innerHeight &&
-        rect.top - menu.offsetHeight - margin > 0;
-      menu.classList.toggle("top-full", !flipUp);
-      menu.classList.toggle("mt-1", !flipUp);
-      menu.classList.toggle("bottom-full", flipUp);
-      menu.classList.toggle("mb-1", flipUp);
-    };
     for (const details of dropdowns) {
       details.addEventListener("toggle", () => {
         if (!details.open) {
@@ -318,12 +370,6 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 2em 0; }`;
         placeMenu(details);
       });
     }
-    window.addEventListener("resize", () => {
-      const open = dropdowns.find((details) => details.open);
-      if (open) {
-        placeMenu(open);
-      }
-    });
 
     // `data-md` is the base-less logical route; the raw-markdown endpoint is a
     // generated page route, so it's served under the deployment base like any
@@ -376,24 +422,9 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 2em 0; }`;
           `vscode:mcp/install?${encodeURIComponent(JSON.stringify({ name: id, type: "http", url: mcpUrl }))}`
         );
 
-      const flash = (el: Element | null, text: string) => {
-        if (!(el instanceof HTMLElement)) {
-          return;
-        }
-        // Remember the element's own (localized) label once — capturing it at
-        // click time would capture "Copied!" on a double-click and stick.
-        el.dataset.blumeLabel ??= el.textContent ?? "";
-        el.textContent = text;
-        setTimeout(() => {
-          el.textContent = el.dataset.blumeLabel ?? "";
-        }, 1500);
-      };
       const copy = async (value: string, el: Element | null) => {
-        try {
-          await navigator.clipboard.writeText(value);
-          flash(el, copiedLabel);
-        } catch {
-          // Clipboard unavailable; nothing to do.
+        if ((await copyText(value)) && el instanceof HTMLElement) {
+          flashLabel(el, copiedLabel);
         }
       };
       root
@@ -420,9 +451,6 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 2em 0; }`;
     }
 
     const label = root.querySelector("[data-blume-copy-label]");
-    // Captured once — inside the handler a double-click would capture and
-    // permanently restore "Copied!".
-    const original = label?.textContent ?? "";
     root
       .querySelector("[data-blume-copy-page]")
       ?.addEventListener("click", async () => {
@@ -431,12 +459,11 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 2em 0; }`;
           if (!response.ok) {
             throw new Error(`Fetching ${md} failed (${response.status})`);
           }
-          await navigator.clipboard.writeText(await response.text());
-          if (label) {
-            label.textContent = copiedLabel;
-            setTimeout(() => {
-              label.textContent = original;
-            }, 1500);
+          if (
+            (await copyText(await response.text())) &&
+            label instanceof HTMLElement
+          ) {
+            flashLabel(label, copiedLabel);
           }
         } catch (error) {
           // Clipboard or fetch unavailable; don't flash "Copied!" untruthfully.
@@ -503,5 +530,8 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 2em 0; }`;
         }
       }
     });
-  }
+  };
+
+  initPageActions();
+  document.addEventListener("astro:after-swap", initPageActions);
 </script>

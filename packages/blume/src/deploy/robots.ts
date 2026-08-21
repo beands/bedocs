@@ -1,6 +1,7 @@
 import { normalizeBasePath, withBasePath } from "../core/base-path.ts";
 import type { BlumeProject } from "../core/project-graph.ts";
 import type { ContentSignalPolicy, ContentSignals } from "../core/schema.ts";
+import { absoluteUrl } from "../core/site-url.ts";
 
 /**
  * Ordered mapping from config field to its `Content-Signal` token. The order
@@ -52,7 +53,7 @@ export const buildRobots = (project: BlumeProject): string | null => {
       normalizeBasePath(config.deployment.base),
       "/sitemap.xml"
     );
-    lines.push("", `Sitemap: ${site.replace(/\/$/u, "")}${sitemapPath}`);
+    lines.push("", `Sitemap: ${absoluteUrl(site, sitemapPath)}`);
   }
   return `${lines.join("\n")}\n`;
 };

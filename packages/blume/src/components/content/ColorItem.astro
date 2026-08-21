@@ -53,6 +53,8 @@ const displayValue =
 </style>
 
 <script>
+  import { copyText, flashLabel } from "../copy-feedback.ts";
+
   const state = window as Window & { __blumeColorCopy?: boolean };
   if (!state.__blumeColorCopy) {
     state.__blumeColorCopy = true;
@@ -67,24 +69,14 @@ const displayValue =
         return;
       }
 
-      try {
-        await navigator.clipboard.writeText(button.dataset.blumeColorCopy ?? "");
-      } catch {
+      if (!(await copyText(button.dataset.blumeColorCopy ?? ""))) {
         return;
       }
 
       const status = button.querySelector<HTMLElement>("[data-blume-color-status]");
-      if (!status) {
-        return;
+      if (status) {
+        flashLabel(status, "Copied");
       }
-
-      // Remember the real value once — capturing at click time would capture
-      // "Copied" on a double-click and stick until reload.
-      status.dataset.blumeLabel ??= status.textContent ?? "";
-      status.textContent = "Copied";
-      window.setTimeout(() => {
-        status.textContent = status.dataset.blumeLabel ?? "";
-      }, 1500);
     });
   }
 </script>

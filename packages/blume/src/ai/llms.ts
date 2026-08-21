@@ -2,6 +2,7 @@ import { normalizeBasePath, withBasePath } from "../core/base-path.ts";
 import { rewriteRelativeImages } from "../core/content-assets.ts";
 import matter from "../core/frontmatter.ts";
 import type { BlumeProject } from "../core/project-graph.ts";
+import { absoluteUrl } from "../core/site-url.ts";
 import { readEntryText } from "../core/sources/read.ts";
 import type { NavNode, Navigation, PageRecord } from "../core/types.ts";
 import { buildRssFeeds } from "../deploy/rss.ts";
@@ -17,20 +18,26 @@ import { applyAgentVisibility } from "./visibility.ts";
 // spaces or non-ASCII must still yield a valid Markdown link.
 const pageUrl = (route: string, site?: string, base = ""): string => {
   const path = withBasePath(base, route);
-  return encodeURI(site ? `${site.replace(/\/$/u, "")}${path}` : path);
+  return encodeURI(site ? absoluteUrl(site, path) : path);
 };
 
 // Drafts, hidden, and ordinary `noindex` pages are excluded. Generated API
 // references keep crawler visibility (`noindex`) separate from LLM visibility
 // (`ai.exclude`), and are excluded wholesale when `ai.llmsTxt.openapi` is off.
-const eligiblePages = (project: BlumeProject): PageRecord[] =>
+// `versions: "current"` additionally drops archived-snapshot pages — the flat
+// llms-full.txt dump serves agents the live docs, not every frozen copy.
+const eligiblePages = (
+  project: BlumeProject,
+  options: { versions?: "all" | "current" } = {}
+): PageRecord[] =>
   project.graph.pages.filter(
     (page) =>
       !(
         page.meta.ai.exclude ||
         page.meta.draft ||
         page.meta.sidebar.hidden ||
-        (page.meta.seo.noindex && page.source.name !== "openapi")
+        (page.meta.seo.noindex && page.source.name !== "openapi") ||
+        (options.versions === "current" && page.version !== "")
       ) &&
       (project.config.ai.llmsTxt.openapi || page.source.name !== "openapi")
   );
@@ -38,22 +45,40 @@ const eligiblePages = (project: BlumeProject): PageRecord[] =>
 /**
  * The navigation trees the index mirrors: the site tree, or one per locale
  * under i18n (each labeled with the locale except the default, so sections
- * don't repeat ambiguously).
+ * don't repeat ambiguously). On a versioned site each archived snapshot's
+ * trees follow the current ones, labeled with the version (and locale) so an
+ * agent reading the index knows which docs are frozen.
  */
 const indexedNavigations = (
   project: BlumeProject
 ): { label?: string; nav: Navigation }[] => {
-  const { i18n } = project.config;
-  if (i18n) {
-    return i18n.locales.flatMap(({ code, label }) => {
-      const nav = project.graph.navigationByLocale[code];
-      if (!nav) {
-        return [];
-      }
-      return [{ label: code === i18n.defaultLocale ? undefined : label, nav }];
+  const { i18n, versions } = project.config;
+  const current: { label?: string; nav: Navigation }[] = i18n
+    ? i18n.locales.flatMap(({ code, label }) => {
+        const nav = project.graph.navigationByLocale[code];
+        if (!nav) {
+          return [];
+        }
+        return [
+          { label: code === i18n.defaultLocale ? undefined : label, nav },
+        ];
+      })
+    : [{ nav: project.graph.navigation }];
+
+  const archived = (versions?.archived ?? []).flatMap((version) => {
+    const byLocale = project.graph.navigationByVersion[version.id] ?? {};
+    const versionLabel = `${version.label ?? version.id} (archived)`;
+    return Object.entries(byLocale).flatMap(([code, nav]) => {
+      const locale = i18n?.locales.find((entry) => entry.code === code);
+      const label =
+        locale && code !== i18n?.defaultLocale
+          ? `${locale.label} — ${versionLabel}`
+          : versionLabel;
+      return [{ label, nav }];
     });
-  }
-  return [{ nav: project.graph.navigation }];
+  });
+
+  return [...current, ...archived];
 };
 
 /**
@@ -168,11 +193,11 @@ export const buildLlmsIndex = (project: BlumeProject): string => {
   return `${[header, ...blocks].join("\n\n")}\n`;
 };
 
-/** Build `llms-full.txt`: the full Markdown body of every page. */
+/** Build `llms-full.txt`: the full Markdown body of every current-docs page. */
 const buildFull = async (project: BlumeProject): Promise<string> => {
   const { config } = project;
-  const pages = eligiblePages(project).toSorted((a, b) =>
-    a.route.localeCompare(b.route)
+  const pages = eligiblePages(project, { versions: "current" }).toSorted(
+    (a, b) => a.route.localeCompare(b.route)
   );
   // Downlevel `<Component>` to its example's source; a same-name user
   // `markdownComponents` entry is spread last and still wins.
