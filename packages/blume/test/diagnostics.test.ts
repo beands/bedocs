@@ -168,7 +168,9 @@ describe("resolveDocsUrl / enrichDiagnostic", () => {
 
   it("fills docsUrl from the code map when absent", () => {
     const out = enrichDiagnostic(diag({ code: "BLUME_CONFIG_INVALID" }));
-    expect(out.docsUrl).toBe("https://github.com/beands/bedocs/docs/configuration");
+    expect(out.docsUrl).toBe(
+      "https://github.com/beands/bedocs/docs/configuration"
+    );
   });
 
   it("keeps an explicit docsUrl", () => {

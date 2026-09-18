@@ -63,7 +63,7 @@ interface Starter {
 const page = (title: string, description: string, body: string): string =>
   `---\ntitle: ${title}\ndescription: ${description}\n---\n\n${body}\n`;
 
-export const STARTERS: Record<Template, Starter> = {
+export const STARTERS = {
   api: {
     configExtra: `
   openapi: {
@@ -84,6 +84,41 @@ export const STARTERS: Record<Template, Starter> = {
           "# API Reference\n\nYour OpenAPI specification is displayed on [`/api`](/api). Specify your specification in `openapi.sources` in `bedocs.config.ts`."
         ),
         path: join(dir, "index.mdx"),
+      },
+    ],
+  },
+  beandsbooker: {
+    configExtra: `
+  theme: {
+    accent: "orange",
+    fonts: {
+      body: "manrope",
+      display: "playfair-display",
+      mono: "ibm-plex-mono",
+    },
+  },
+  navigation: {
+    tabs: [
+      { label: "Документация", path: "/" },
+      { label: "API", path: "/api" },
+    ],
+  },`,
+    files: (dir) => [
+      {
+        content: page(
+          "BeandsBooker",
+          "Документация сервиса бронирования BeandsBooker.",
+          "# BeandsBooker\n\n**BeandsBooker** — сервис онлайн-бронирования для малого бизнеса.\n\n## Возможности\n\n- Онлайн-запись клиентов\n- Управление расписанием\n- REST API для интеграции\n\n## Начало работы\n\nИзучите [API-справочник](/api) или [руководство по интеграции](/integration)."
+        ),
+        path: join(dir, "index.mdx"),
+      },
+      {
+        content: page(
+          "Интеграция",
+          "Интеграция BeandsBooker в ваш сайт.",
+          '# Интеграция\n\n## Виджет записи\n\nВставьте виджет на любую страницу:\n\n```html\n<script src="https://cdn.beandsbooker.ru/widget.js" data-business="your-id"></script>\n```\n\n## REST API\n\nБазовый URL: `https://api.beandsbooker.ru/v1`'
+        ),
+        path: join(dir, "integration.mdx"),
       },
     ],
   },
@@ -173,7 +208,7 @@ export const STARTERS: Record<Template, Starter> = {
         content: page(
           "Установка",
           "Установка и настройка Synthix SDK.",
-          "# Установка\n\n```package-install\n@synthix/sdk\n```\n\n## Быстрый старт\n\n```ts\nimport { Synthix } from \"@synthix/sdk\";\n\nconst client = new Synthix({ apiKey: process.env.SYNTHIX_API_KEY });\n```"
+          '# Установка\n\n```package-install\n@synthix/sdk\n```\n\n## Быстрый старт\n\n```ts\nimport { Synthix } from "@synthix/sdk";\n\nconst client = new Synthix({ apiKey: process.env.SYNTHIX_API_KEY });\n```'
         ),
         path: join(dir, "installation.mdx"),
       },
@@ -219,41 +254,6 @@ export const STARTERS: Record<Template, Starter> = {
       },
     ],
   },
-  beandsbooker: {
-    configExtra: `
-  theme: {
-    accent: "orange",
-    fonts: {
-      body: "manrope",
-      display: "playfair-display",
-      mono: "ibm-plex-mono",
-    },
-  },
-  navigation: {
-    tabs: [
-      { label: "Документация", path: "/" },
-      { label: "API", path: "/api" },
-    ],
-  },`,
-    files: (dir) => [
-      {
-        content: page(
-          "BeandsBooker",
-          "Документация сервиса бронирования BeandsBooker.",
-          "# BeandsBooker\n\n**BeandsBooker** — сервис онлайн-бронирования для малого бизнеса.\n\n## Возможности\n\n- Онлайн-запись клиентов\n- Управление расписанием\n- REST API для интеграции\n\n## Начало работы\n\nИзучите [API-справочник](/api) или [руководство по интеграции](/integration)."
-        ),
-        path: join(dir, "index.mdx"),
-      },
-      {
-        content: page(
-          "Интеграция",
-          "Интеграция BeandsBooker в ваш сайт.",
-          "# Интеграция\n\n## Виджет записи\n\nВставьте виджет на любую страницу:\n\n```html\n<script src=\"https://cdn.beandsbooker.ru/widget.js\" data-business=\"your-id\"></script>\n```\n\n## REST API\n\nБазовый URL: `https://api.beandsbooker.ru/v1`"
-        ),
-        path: join(dir, "integration.mdx"),
-      },
-    ],
-  },
   universal: {
     configExtra: "",
     files: (dir) => [
@@ -267,16 +267,14 @@ export const STARTERS: Record<Template, Starter> = {
       },
     ],
   },
-};
+} satisfies Record<Template, Starter>;
 
 /**
  * Install + dev commands to print for the chosen package manager, plus the
  * prefix that runs a locally installed bin (`exec`, e.g. `npx bedocs eject`) —
  * dependency bins aren't on PATH, so a bare `bedocs …` hint would not run.
  */
-export const commandsFor = (
-  pm: PackageManager
-): { build: string; dev: string; exec: string; install: string } => ({
+export const commandsFor = (pm: PackageManager) => ({
   // `bun build` invokes Bun's bundler, not the package.json `build` script —
   // unlike `bun dev`, the script name is shadowed by a builtin subcommand.
   build: pm === "npm" || pm === "bun" ? `${pm} run build` : `${pm} build`,
@@ -290,6 +288,8 @@ export const commandsFor = (
  * `name/version` token of `npm_config_user_agent`), falling back to npm.
  */
 export const detectPackageManager = (userAgent?: string): PackageManager => {
+  // SAFETY: the value is used only after the PACKAGE_MANAGERS.includes() check
+  // below, which validates it as a real PackageManager at runtime.
   const name = userAgent?.split("/")[0] as PackageManager | undefined;
   return name !== undefined && PACKAGE_MANAGERS.includes(name) ? name : "npm";
 };
@@ -300,6 +300,8 @@ export const detectProjectPackageManager = async (
 ): Promise<PackageManager> => {
   const detected = await detect({ cwd: root });
   const name = detected?.name;
+  // SAFETY: `name` is returned only when PACKAGE_MANAGERS.includes() confirms
+  // it is a known package-manager id, so the assertion never escapes unchecked.
   return name !== undefined && PACKAGE_MANAGERS.includes(name as PackageManager)
     ? (name as PackageManager)
     : detectPackageManager(process.env.npm_config_user_agent);
@@ -339,7 +341,7 @@ const hasRemoteSource = (sources: SourceKind[]): boolean =>
  * Config snippets for each remote source kind, with placeholder values to
  * replace and comments naming the env var each source authenticates with.
  */
-const SOURCE_SNIPPETS: Record<Exclude<SourceKind, "filesystem">, string> = {
+const SOURCE_SNIPPETS = {
   "github-releases": `      // Changelog entries from GitHub Releases. Private repos read
       // GITHUB_TOKEN from the environment.
       {
@@ -370,7 +372,7 @@ const SOURCE_SNIPPETS: Record<Exclude<SourceKind, "filesystem">, string> = {
         query: \`*[_type == "doc"]\`,
         prefix: "sanity",
       },`,
-};
+} satisfies Record<Exclude<SourceKind, "filesystem">, string>;
 
 /**
  * The `content` block for the generated config, or an empty string when the
@@ -416,7 +418,7 @@ export default defineConfig({
 `;
 
 /** SDK dependencies required by the selected remote sources. */
-const extraDepsFor = (sources: SourceKind[]): Record<string, string> => ({
+const extraDepsFor = (sources: SourceKind[]) => ({
   ...(sources.includes("notion") && { "@notionhq/client": "^2.2.15" }),
   ...(sources.includes("sanity") && { "@sanity/client": "^7.25.0" }),
 });

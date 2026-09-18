@@ -1,4 +1,4 @@
 bun run check
 bun run typecheck
 bun run test:coverage
-bun run build --filter blume
+bun run build --filter @beands/bedocs

@@ -30,8 +30,8 @@ upstream  https://github.com/haydenbleasel/blume.git
 
 ## Матрица совместимости
 
-| BeDocs | Blume upstream | Примечания |
-|--------|---------------|------------|
+| BeDocs | Blume upstream | Примечания     |
+| ------ | -------------- | -------------- |
 | 1.0.0  | 1.4.1          | Начальный форк |
 
 ## BeDocs-specific изменения
@@ -44,8 +44,10 @@ upstream  https://github.com/haydenbleasel/blume.git
 - `packages/blume/src/core/diagnostics.ts` — русские сообщения об ошибках
 - `packages/blume/src/search/` — нормализация русского текста
 - `admin/` — admin-панель для управления multi-project документацией (Express.js + static HTML/JS)
-  - `admin/server.js` — API: CRUD проектов, upload-and-process, AI-генерация через crea-ai (RAG, поэтапный план, async job polling)
-  - `admin/public/index.html` — UI: drag-and-drop загрузка, выбор файлов, прогресс AI-генерации
+  - `admin/server.js` — тонкий HTTP-слой: CRUD проектов, upload-and-process, jobs API (status/SSE/resume/retry/cancel)
+  - `admin/lib/` — backend-логика: config, settings, validate, job-store (персистентные задания в `admin/.jobs/`), crea-ai (streaming, async job polling, retry/backoff/Retry-After), generation-runner (контрольные точки, автовосстановление), fs-utils, build, prompts
+  - `admin/public/` — SPA: index.html + `css/` (tokens/components/layout, светлая и тёмная темы) + `js/` (api, dom, icons, components, generation SSE-клиент, theme, app); иконки Lucide и шрифт Inter из локальных npm-пакетов без CDN
+  - `admin/test/`, `admin/e2e/` — node:test с mock crea-ai (resilience, security) и Playwright e2e
 - `apps/docs/pages/index.astro` — динамическая главная страница со списком проектов
 - `apps/docs/content/projects/` — multi-project структура контента
 - `NOTICE.md`, `UPSTREAM.md`, `SECURITY.md`, `CONTRIBUTING.md` — BeDocs-specific файлы

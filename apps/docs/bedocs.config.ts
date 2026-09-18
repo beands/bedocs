@@ -26,8 +26,7 @@ export default defineConfig({
     adapter: "vercel",
     output: "server",
   },
-  description:
-    "Платформа для создания документации ваших проектов.",
+  description: "Платформа для создания документации ваших проектов.",
   export: true,
   i18n: {
     defaultLocale: "ru",

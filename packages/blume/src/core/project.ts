@@ -12,7 +12,10 @@ const LEGACY_CONFIG_FILENAMES = productMeta.legacyConfigFiles;
 const THEME_FILENAMES = ["theme.css"];
 const COMPONENTS_FILENAMES = ["components.tsx", "components.ts"];
 
-const firstExisting = (root: string, names: readonly string[]): string | null => {
+const firstExisting = (
+  root: string,
+  names: readonly string[]
+): string | null => {
   for (const name of names) {
     const candidate = join(root, name);
     if (existsSync(candidate)) {

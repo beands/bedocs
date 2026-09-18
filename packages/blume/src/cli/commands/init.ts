@@ -76,7 +76,8 @@ export const initCommand = defineCommand({
       type: "string",
     },
     template: {
-      description: "Starter template: docs | api | sdk | changelog | synthix | taskcraft | beandsbooker | universal.",
+      description:
+        "Starter template: docs | api | sdk | changelog | synthix | taskcraft | beandsbooker | universal.",
       type: "string",
     },
     yes: {

@@ -1,0 +1,5 @@
+node_modules/
+.jobs/
+test-results/
+playwright-report/
+settings.json

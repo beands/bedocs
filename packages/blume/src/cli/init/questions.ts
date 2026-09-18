@@ -94,7 +94,11 @@ export const collectAnswers = async (
       options: [
         { hint: "Сайт документации на Markdown", label: "docs", value: "docs" },
         { hint: "Справочник OpenAPI на /api", label: "api", value: "api" },
-        { hint: "Документация SDK со страницей установки", label: "sdk", value: "sdk" },
+        {
+          hint: "Документация SDK со страницей установки",
+          label: "sdk",
+          value: "sdk",
+        },
         {
           hint: "Документация плюс вкладка changelog",
           label: "changelog",
@@ -130,7 +134,11 @@ export const collectAnswers = async (
     initialValues: ["filesystem"],
     message: "Где хранится контент?",
     options: [
-      { hint: "Локальные .mdx файлы", label: "filesystem", value: "filesystem" },
+      {
+        hint: "Локальные .mdx файлы",
+        label: "filesystem",
+        value: "filesystem",
+      },
       {
         hint: "Changelog из GitHub Releases",
         label: "github-releases",

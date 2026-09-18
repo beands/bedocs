@@ -25,6 +25,12 @@ export default defineConfig({
     // Docs code-sample source shown verbatim in a before/after diff; the
     // PascalCase `Button` export IS the example, so naming rules don't apply.
     "apps/docs/diffs",
+    // The admin panel is a standalone Express app outside the Bun workspaces
+    // (own npm toolchain: node:test + Playwright, not the package's TS code).
+    // Its predecessor predates this ruleset and was never lint-clean; several
+    // core rules (no-await-in-loop, func-style) conflict with intentional
+    // sequential checkpointing in the generation runner.
+    "admin/**",
     "packages/video/src/components",
     "packages/video/src/lib/utils.ts",
     "packages/video/src/lib/remocn-ui",

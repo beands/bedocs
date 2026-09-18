@@ -1,5 +1,5 @@
-import { getBlumeVersion } from "./version.ts";
 import { productMeta } from "./product-meta.ts";
+import { getBlumeVersion } from "./version.ts";
 
 /**
  * Derive a valid npm package name from a directory name, falling back to

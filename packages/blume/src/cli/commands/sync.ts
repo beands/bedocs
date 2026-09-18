@@ -25,7 +25,8 @@ export const syncCommand = defineCommand({
     strict: { description: "Fail on diagnostics.", type: "boolean" },
   },
   meta: {
-    description: "Обновить удалённые источники контента и регенерировать runtime.",
+    description:
+      "Обновить удалённые источники контента и регенерировать runtime.",
     name: "sync",
   },
   async run({ args }) {

@@ -1,0 +1,113 @@
+/* ─── BeDocs admin design tokens ─────────────────────────────
+   Local Inter Variable (no CDN), slate palette, dark + light. */
+
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/vendor/fonts/inter-latin-wght-normal.woff2")
+    format("woff2-variations");
+  unicode-range: U+0000-00FF, U+2000-206F, U+20AC, U+2190-21FF;
+}
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/vendor/fonts/inter-cyrillic-wght-normal.woff2")
+    format("woff2-variations");
+  unicode-range: U+0400-04FF, U+0500-052F;
+}
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/vendor/fonts/inter-latin-ext-wght-normal.woff2")
+    format("woff2-variations");
+  unicode-range: U+0100-024F, U+1E00-1EFF;
+}
+
+:root {
+  --font-sans:
+    "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-mono:
+    "Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, monospace;
+
+  --accent: #22c55e;
+  --accent-hover: #16a34a;
+  --accent-contrast: #04180b;
+  --accent-soft: rgba(34, 197, 94, 0.14);
+
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --danger-soft: rgba(239, 68, 68, 0.13);
+  --danger-contrast: #fff;
+
+  --warning: #eab308;
+  --warning-soft: rgba(234, 179, 8, 0.14);
+  --info: #38bdf8;
+  --info-soft: rgba(56, 189, 248, 0.13);
+
+  --bg: #0f172a;
+  --bg-soft: #131f38;
+  --surface: #1e293b;
+  --surface-2: #263449;
+  --surface-3: #2e3f58;
+  --border: #334155;
+  --border-strong: #475569;
+  --text: #f1f5f9;
+  --text-muted: #94a3b8;
+  --text-faint: #64748b;
+
+  --shadow-s: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-m: 0 10px 30px rgba(2, 6, 23, 0.45);
+  --shadow-l: 0 24px 60px rgba(2, 6, 23, 0.55);
+
+  --radius-s: 6px;
+  --radius: 10px;
+  --radius-l: 16px;
+
+  --speed: 180ms;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+
+  --header-h: 60px;
+  --max-w: 1180px;
+
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --bg: #f1f5f9;
+  --bg-soft: #e9eef5;
+  --surface: #ffffff;
+  --surface-2: #f4f7fb;
+  --surface-3: #e8edf4;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --text: #0f172a;
+  --text-muted: #526078;
+  --text-faint: #8b98ab;
+
+  --accent: #16a34a;
+  --accent-hover: #15803d;
+  --accent-contrast: #ffffff;
+  --accent-soft: rgba(22, 163, 74, 0.12);
+
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --danger-soft: rgba(220, 38, 38, 0.1);
+
+  --warning: #ca8a04;
+  --warning-soft: rgba(202, 138, 4, 0.14);
+  --info: #0284c7;
+  --info-soft: rgba(2, 132, 199, 0.1);
+
+  --shadow-s: 0 1px 2px rgba(15, 23, 42, 0.07);
+  --shadow-m: 0 10px 30px rgba(15, 23, 42, 0.12);
+  --shadow-l: 0 24px 60px rgba(15, 23, 42, 0.18);
+
+  color-scheme: light;
+}

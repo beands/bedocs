@@ -1,4 +1,6 @@
 declare module "blume:data" {
-  const data: any;
+  /** The generated per-project data snapshot (see `core/data.ts` in bedocs). */
+  // oxlint-disable-next-line typescript/consistent-type-imports
+  const data: import("@beands/bedocs").BlumeData;
   export default data;
 }

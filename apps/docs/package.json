@@ -13,8 +13,8 @@
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.0",
-    "@iconify-json/lucide": "^1.2.115",
-    "@beands/bedocs": "workspace:*"
+    "@beands/bedocs": "workspace:*",
+    "@iconify-json/lucide": "^1.2.115"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.0",

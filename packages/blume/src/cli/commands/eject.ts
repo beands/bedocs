@@ -34,7 +34,8 @@ export const ejectCommand = defineCommand({
     yes: { description: "Skip the confirmation prompt.", type: "boolean" },
   },
   meta: {
-    description: "Выгрузить генерируемый runtime в самостоятельный Astro-проект.",
+    description:
+      "Выгрузить генерируемый runtime в самостоятельный Astro-проект.",
     name: "eject",
   },
   async run({ args }) {

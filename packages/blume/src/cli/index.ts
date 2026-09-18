@@ -1,7 +1,7 @@
 import { defineCommand, runMain } from "citty";
 
-import { getBlumeVersion } from "../core/version.ts";
 import { productMeta } from "../core/product-meta.ts";
+import { getBlumeVersion } from "../core/version.ts";
 import { addCommand } from "./commands/add.ts";
 import { auditCommand } from "./commands/audit.ts";
 import { buildCommand } from "./commands/build.ts";
