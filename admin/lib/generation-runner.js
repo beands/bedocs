@@ -8,12 +8,16 @@ import {
   PROJECTS_DIR,
   GEN_MAX_CONTINUATIONS,
   GEN_DRAFT_FLUSH_MS,
+  GEN_FALLBACK_MODELS,
+  GEN_PAUSE_RETRY_MS,
+  GEN_MAX_ROUNDS,
   DEFAULT_MODEL,
 } from "./config.js";
 import {
   chatCompletion,
   pollRemoteJob,
   withRetry,
+  CreaError,
   isAbortError,
   isRetryable,
 } from "./crea-ai.js";
@@ -33,6 +37,7 @@ import { isValidDocFileName, safeJoin } from "./validate.js";
 // Single-process (PM2 fork) — in-memory guards are sufficient.
 
 const runs = new Map(); // jobId -> { controller, promise }
+const pauseTimers = new Map(); // jobId -> setTimeout handle (auto-resume)
 const subscribers = new Map(); // jobId -> Set<fn>
 const emitQueues = new Map(); // jobId -> Promise (serialize event writes)
 
@@ -190,6 +195,9 @@ export async function runJob(jobId) {
 
 async function execute(job, signal) {
   const settings = await readSettings();
+  // The model chain starts at the job's current model — on resume after a
+  // switch it continues from the fallback, not from the failed original.
+  const models = modelChain(job, settings);
   job.status = "running";
   job.error = null;
   await store.saveJob(job);
@@ -212,6 +220,7 @@ async function execute(job, signal) {
       const analysis = await callAi(job, {
         apiKey: settings.creaAiKey,
         maxTokens: 8000,
+        models,
         messages: [
           {
             role: "system",
@@ -283,7 +292,8 @@ async function execute(job, signal) {
           page,
           fileContents,
           settings.creaAiKey,
-          signal
+          signal,
+          models
         );
         page.status = "saved";
         page.generated = written;
@@ -361,14 +371,46 @@ async function execute(job, signal) {
       page: job.currentPage,
       at: new Date().toISOString(),
     };
-    // Retryable failures that exhausted attempts pause for auto/manual resume;
-    // fatal ones need attention (fix key/model/input, then resume).
+    // "paused" means the whole model chain was exhausted — a global provider
+    // failure. It auto-resumes after a cooldown; fatal errors still need
+    // attention (fix key/model/input, then resume manually).
     job.status = isRetryable(error) ? "paused" : "needs_attention";
     await store.saveJob(job);
     await emit(job, "job.status", { error: job.error, status: job.status });
+    if (job.status === "paused") {
+      await scheduleAutoResume(job);
+    }
     return job;
   }
   return job;
+}
+
+// A paused job (all models exhausted) retries the whole chain after a
+// cooldown — outages are usually temporary. After GEN_MAX_ROUNDS exhausted
+// rounds the job is marked needs_attention instead of looping forever.
+async function scheduleAutoResume(job) {
+  job.autoResumes = (job.autoResumes || 0) + 1;
+  if (job.autoResumes > GEN_MAX_ROUNDS) {
+    job.status = "needs_attention";
+    await store.saveJob(job);
+    await emit(job, "job.status", {
+      error: job.error,
+      status: "needs_attention",
+    });
+    return;
+  }
+  await store.saveJob(job);
+  await emit(job, "log", {
+    message: `Все модели исчерпаны — авто-возобновление через ${Math.round(GEN_PAUSE_RETRY_MS / 1000)}с (раунд ${job.autoResumes}/${GEN_MAX_ROUNDS})`,
+  });
+  const timer = setTimeout(() => {
+    pauseTimers.delete(job.jobId);
+    resumeJob(job.jobId).catch((error) =>
+      console.error(`job ${job.jobId} auto-resume error:`, error)
+    );
+  }, GEN_PAUSE_RETRY_MS);
+  timer.unref?.();
+  pauseTimers.set(job.jobId, timer);
 }
 
 async function loadJobFiles(job) {
@@ -384,68 +426,123 @@ async function loadJobFiles(job) {
   return contents;
 }
 
-// One AI call with retry policy. Emits retry events so the UI shows attempts.
-// If a previous attempt already created a remote async job (remoteStatusUrl
-// persisted), we resume polling THAT job instead of posting a duplicate.
-async function callAi(job, { apiKey, messages, maxTokens, signal, onDelta }) {
-  return withRetry(
-    async () => {
-      if (job.remoteStatusUrl) {
-        const polled = await pollRemoteJob({
-          apiKey,
-          signal,
-          statusUrl: job.remoteStatusUrl,
-        });
-        job.remoteJobId = null;
-        job.remoteStatusUrl = null;
-        return polled.text;
-      }
-      const result = await chatCompletion({
-        apiKey,
-        maxTokens,
-        messages,
-        model: job.model,
-        onDelta,
-        signal,
-        stream: true,
+// The model chain for a job: the selected/current model first, then the
+// fallback list (settings.fallbackModels or the built-in defaults).
+function modelChain(job, settings) {
+  const fallback =
+    Array.isArray(settings.fallbackModels) && settings.fallbackModels.length
+      ? settings.fallbackModels
+      : GEN_FALLBACK_MODELS;
+  return [
+    ...new Set([job.model, ...fallback.filter((m) => m && m !== job.model)]),
+  ];
+}
+
+// One AI call with retry policy + model fallback. Each model gets the full
+// retry budget; when it is exhausted (or the request is rejected outright,
+// e.g. unknown model) the job switches to the next model WITHOUT pausing and
+// keeps going. Only auth errors short-circuit the whole chain — they are
+// global by definition.
+async function callAi(
+  job,
+  { apiKey, messages, maxTokens, signal, onDelta, models }
+) {
+  const chain = models?.length ? models : [job.model];
+  // Skip models that already failed — job.model tracks the current position.
+  const startIdx = Math.max(0, chain.indexOf(job.model));
+  let lastError = null;
+  for (let i = startIdx; i < chain.length; i++) {
+    const model = chain[i];
+    if (model !== job.model) {
+      const prev = job.model;
+      job.model = model;
+      await store.saveJob(job);
+      await emit(job, "job.status", {
+        model,
+        stage: job.stage,
+        status: "running",
       });
-      if (result.async) {
-        // Persist remote job ids so a restart/resume polls the same job.
-        job.remoteJobId = result.remoteJobId;
-        job.remoteStatusUrl = result.statusUrl;
-        await store.saveJob(job);
-        await emit(job, "log", {
-          message: "Crea-AI: асинхронное задание, опрос статуса…",
-        });
-        const polled = await pollRemoteJob({
-          apiKey,
-          signal,
-          statusUrl: result.statusUrl,
-        });
-        job.remoteJobId = null;
-        job.remoteStatusUrl = null;
-        return polled.text;
-      }
-      return result.text;
-    },
-    {
-      onRetry: async ({ attempt, waitMs, error }) => {
-        await emit(job, "retry", {
-          attempt,
-          waitMs,
-          error: error.message,
-          stage: job.stage,
-          page: job.currentPage,
-        });
-      },
-      signal,
+      await emit(job, "log", {
+        message: `Модель ${prev} не справилась — переключаюсь на ${model}`,
+      });
     }
-  );
+    try {
+      return await withRetry(
+        async () => {
+          if (job.remoteStatusUrl) {
+            const polled = await pollRemoteJob({
+              apiKey,
+              signal,
+              statusUrl: job.remoteStatusUrl,
+            });
+            job.remoteJobId = null;
+            job.remoteStatusUrl = null;
+            return polled.text;
+          }
+          const result = await chatCompletion({
+            apiKey,
+            maxTokens,
+            messages,
+            model: job.model,
+            onDelta,
+            signal,
+            stream: true,
+          });
+          if (result.async) {
+            // Persist remote job ids so a restart/resume polls the same job.
+            job.remoteJobId = result.remoteJobId;
+            job.remoteStatusUrl = result.statusUrl;
+            await store.saveJob(job);
+            await emit(job, "log", {
+              message: "Crea-AI: асинхронное задание, опрос статуса…",
+            });
+            const polled = await pollRemoteJob({
+              apiKey,
+              signal,
+              statusUrl: result.statusUrl,
+            });
+            job.remoteJobId = null;
+            job.remoteStatusUrl = null;
+            return polled.text;
+          }
+          return result.text;
+        },
+        {
+          onRetry: async ({ attempt, waitMs, error }) => {
+            await emit(job, "retry", {
+              attempt,
+              waitMs,
+              error: error.message,
+              model: job.model,
+              stage: job.stage,
+              page: job.currentPage,
+            });
+          },
+          signal,
+        }
+      );
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
+      lastError = error;
+      // Auth problems are global — switching models cannot help.
+      const isAuth =
+        error instanceof CreaError && [401, 403].includes(error.status);
+      if (isAuth || i === chain.length - 1) {
+        throw error;
+      }
+      await emit(job, "log", {
+        message: `Модель ${model} исчерпала попытки (${error.message.slice(0, 140)}) — резерв: ${chain[i + 1]}`,
+      });
+    }
+  }
+  throw lastError;
 }
 
 // ─── Page generation with checkpoints ────────────────────────
 
-async function generatePage(job, page, fileContents, apiKey, signal) {
+async function generatePage(job, page, fileContents, apiKey, signal, models) {
   const projectPath = safeJoin(PROJECTS_DIR, job.project);
   let draft = await store.readDraft(job.jobId, page.fileName);
   let lastFlush = 0;
@@ -526,6 +623,7 @@ async function generatePage(job, page, fileContents, apiKey, signal) {
           apiKey,
           maxTokens: 16000,
           messages,
+          models,
           onDelta: (delta, full) => {
             streamed = full;
             const combined = continuing ? mergeContinuation(draft, full) : full;
@@ -562,6 +660,24 @@ async function generatePage(job, page, fileContents, apiKey, signal) {
       const combined = continuing
         ? mergeContinuation(draft, finishedText)
         : finishedText;
+      if (looksTruncated(combined)) {
+        // Soft-EOF acceptance (crea-ai never sends [DONE]) means a cleanly
+        // closed stream can still be cut mid-file. Keep the fragment as a
+        // draft and continue exactly like a broken stream would.
+        draft = combined;
+        await store.writeDraft(job.jobId, page.fileName, draft);
+        page.continuations += 1;
+        await emit(job, "page.status", {
+          fileName: page.fileName,
+          saved: draft.length,
+          status: "retry",
+        });
+        const e = new Error(
+          "AI: ответ оборвался посреди файла — продолжаю с черновика"
+        );
+        e.retryable = true;
+        throw e;
+      }
       const files = extractPageFiles(page, combined);
       if (!files || Object.keys(files).length === 0) {
         // Unparseable/too-short output: keep draft, retry (continuation context
@@ -648,6 +764,18 @@ export function mergeContinuation(existing, addition) {
   return existing + addition;
 }
 
+// Detects output cut mid-file: a complete page response ends with a closing
+// fence; an unclosed ```file: block means the stream died early.
+function looksTruncated(text) {
+  const trimmed = (text || "").trimEnd();
+  if (!trimmed || trimmed.endsWith("```")) {
+    return false;
+  }
+  const opens = (trimmed.match(/```file:/g) || []).length;
+  const closes = (trimmed.match(/^```\s*$/gm) || []).length;
+  return opens > closes;
+}
+
 function extractPageFiles(page, text) {
   const parsed = parseGeneratedFiles(text);
   if (Object.keys(parsed).length > 0) {
@@ -675,6 +803,11 @@ export async function resumeJob(jobId) {
   }
   if (job.status === "done" && job.build?.status !== "error") {
     throw new JobError("Задание уже завершено", 409);
+  }
+  const pending = pauseTimers.get(jobId);
+  if (pending) {
+    clearTimeout(pending);
+    pauseTimers.delete(jobId);
   }
   if (runs.has(jobId)) {
     return { job, resumed: false, alreadyRunning: true };
@@ -742,6 +875,11 @@ export async function cancelJob(jobId) {
   const job = await store.readJob(jobId);
   if (!job) {
     throw new JobError("Задание не найдено", 404);
+  }
+  const pending = pauseTimers.get(jobId);
+  if (pending) {
+    clearTimeout(pending);
+    pauseTimers.delete(jobId);
   }
   const run = runs.get(jobId);
   if (run) {

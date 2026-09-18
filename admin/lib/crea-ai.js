@@ -260,6 +260,12 @@ async function readChatStream(response, { signal, onDelta }) {
     throw streamError;
   }
   if (!sawDone) {
+    // crea-ai.ru closes SSE streams with a clean EOF and never sends the
+    // [DONE] sentinel — content that arrived is still a usable response.
+    // An empty stream, though, is a genuine failure worth retrying.
+    if (text.length > 0) {
+      return { streamEnded: true, text, usage };
+    }
     const err = new CreaError("Crea-AI: поток завершился без [DONE]", {
       retryable: true,
     });

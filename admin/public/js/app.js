@@ -1281,6 +1281,7 @@ async function loadSettings() {
     const data = await api.settings();
     $("set-key").value = data.creaAiKey || "";
     $("set-model").value = data.defaultModel || "";
+    $("set-fallback-models").value = data.fallbackModels || "";
     $("set-site-url").value = data.siteUrl || state.config.siteUrl || "";
     $("set-key-status").textContent = data.hasKey
       ? "API-ключ настроен и хранится на сервере"
@@ -1304,6 +1305,7 @@ async function saveSettings() {
     await api.saveSettings({
       creaAiKey: $("set-key").value.trim(),
       defaultModel: $("set-model").value.trim(),
+      fallbackModels: $("set-fallback-models").value.trim(),
       siteUrl: $("set-site-url").value.trim(),
     });
     toast("Настройки сохранены", "success");

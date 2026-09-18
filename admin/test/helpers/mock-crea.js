@@ -47,10 +47,14 @@ export async function startMockCrea() {
     if (req.method === "POST" && req.url === "/v1/chat/completions") {
       const parsed = JSON.parse(body || "{}");
       state.requests.push(parsed);
-      const b = state.behaviors.shift() || {
-        text: state.defaultText,
-        type: "stream",
-      };
+      // Per-model overrides: state.byModel[model] = behavior (always) or
+      // [behaviors] (queue). Otherwise the shared queue, else the default.
+      const mb = state.byModel?.[parsed.model];
+      const b = (Array.isArray(mb) ? mb.shift() : mb) ||
+        state.behaviors.shift() || {
+          text: state.defaultText,
+          type: "stream",
+        };
       if (process.env.CREA_DEBUG) {
         const user = (parsed.messages || [])
           .filter((m) => m.role === "user")
@@ -111,19 +115,31 @@ export async function startMockCrea() {
             .reverse()
             .find((m) => m.role === "user");
           const draftMatch = String(lastMsg?.content || "").match(
-            /```mdx\n([\s\S]*?)```/
+            /```mdx\n([\s\S]*)```/
           );
-          const draftTail = draftMatch ? draftMatch[1] : "";
+          const draftTail = (draftMatch ? draftMatch[1] : "").trimEnd();
           const anchor = draftTail.slice(-60);
           let anchorEnd = b.full.length;
           if (anchor) {
-            const pos = b.full.indexOf(anchor);
+            // The draft is a prefix of `full`, so the anchor's true position
+            // is its LAST occurrence — earlier identical windows in
+            // repetitive text would emit from a wrong (too early) offset.
+            const pos = b.full.lastIndexOf(anchor);
             if (pos !== -1) {
               anchorEnd = pos + anchor.length;
             }
           }
           const echoLen = b.echoLen ?? 100;
-          const emitted = b.full.slice(Math.max(0, anchorEnd - echoLen));
+          // A non-continuation request (empty draft) gets the whole page,
+          // like a real model asked to write it from scratch.
+          const emitted = draftTail
+            ? b.full.slice(Math.max(0, anchorEnd - echoLen))
+            : b.full;
+          if (process.env.CREA_DEBUG) {
+            console.log(
+              `MOCK continue anchorEnd=${anchorEnd} draftTailLen=${draftTail.length} emittedLen=${emitted.length}`
+            );
+          }
           sseWrite(res, emitted, b.chunkSize);
           res.write("data: [DONE]\n\n");
           return res.end();

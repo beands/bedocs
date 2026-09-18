@@ -200,6 +200,19 @@
               </p>
             </div>
             <div class="form-group">
+              <label for="set-fallback-models">Резервные модели</label>
+              <input
+                type="text"
+                id="set-fallback-models"
+                placeholder="gemini-3-8-flash, gemini-3-7-flash, grok-4-6"
+              />
+              <p class="field-hint">
+                Через запятую. Если основная модель сбоит, задание автоматически
+                переключается на следующую и продолжается без паузы. Пусто —
+                встроенная цепочка.
+              </p>
+            </div>
+            <div class="form-group">
               <label for="set-site-url">Адрес сайта документации</label>
               <input
                 type="url"

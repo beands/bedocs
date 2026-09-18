@@ -35,6 +35,10 @@ let seq = 0;
 async function generateAndWait(behaviors, opts = {}) {
   ctx.crea.state.behaviors.length = 0; // drop leftovers from previous tests
   ctx.crea.state.behaviors.push(...behaviors);
+  ctx.crea.state.byModel = {};
+  if (opts.byModel) {
+    ctx.crea.state.byModel = opts.byModel;
+  }
   ctx.crea.state.requests.length = 0;
   // unique instructions → unique inputHash → no cross-test job dedup
   const res = await ctx.api.post("/api/projects/test-proj/generate", {
@@ -343,4 +347,113 @@ test("SSE stream replays events after Last-Event-ID reconnect", async () => {
     sse.events.every((e) => e.id > 0),
     "events carry ids for Last-Event-ID"
   );
+});
+
+// 13. crea-ai.ru never sends [DONE] — a clean EOF with full content is a
+// complete response, not a failure (this was the production failure mode).
+test("stream ending without [DONE] but with full content is accepted", async () => {
+  const { job } = await generateAndWait([
+    { fraction: 1, text: ANALYSIS, type: "endEarly" },
+    { fraction: 1, text: pageText("index.mdx", "Главная"), type: "endEarly" },
+    { fraction: 1, text: pageText("api.mdx", "API"), type: "endEarly" },
+  ]);
+  assert.equal(job.status, "done");
+  assert.ok(existsSync(join(ctx.projectsDir, "index.mdx")));
+  assert.ok(existsSync(join(ctx.projectsDir, "api.mdx")));
+});
+
+// 14. A model that keeps failing exhausts its retries, then the job switches
+// to the next model in the fallback chain and continues — no pause.
+test("failing model is replaced by a fallback model mid-job", async () => {
+  const { job } = await generateAndWait([], {
+    byModel: {
+      "mock-model": { status: 500, type: "status" }, // fails on every request
+    },
+    timeoutMs: 20_000,
+  });
+  try {
+    assert.equal(job.status, "done");
+    assert.equal(
+      job.model,
+      "gemini-3-8-flash",
+      "job must switch to the first fallback model"
+    );
+    const used = new Set(ctx.crea.state.requests.map((r) => r.model));
+    assert.ok(used.has("gemini-3-8-flash"));
+    // the primary model burned exactly its retry budget, nothing more
+    const primaryCalls = ctx.crea.state.requests.filter(
+      (r) => r.model === "mock-model"
+    ).length;
+    assert.ok(primaryCalls > 0 && primaryCalls <= 6);
+  } finally {
+    ctx.crea.state.byModel = {};
+  }
+});
+
+// 15. A cleanly-closed but mid-file truncated stream is continued from the
+// draft checkpoint — the partial page is never written to disk.
+test("truncated soft-EOF page continues from draft, not written partial", async () => {
+  const full = pageText("index.mdx", "Главная");
+  const { job } = await generateAndWait(
+    [
+      { text: ANALYSIS, type: "stream" },
+      { fraction: 0.6, text: full, type: "endEarly" },
+      { echoLen: 100, full, type: "continue" },
+      { text: pageText("api.mdx", "API"), type: "stream" },
+    ],
+    { timeoutMs: 20_000 }
+  );
+  assert.equal(job.status, "done");
+  const written = await readFile(join(ctx.projectsDir, "index.mdx"), "utf-8");
+  const expected = full
+    .replace(/^```file:index\.mdx\n/, "")
+    .replace(/\n```$/, "")
+    .trim();
+  assert.equal(written, expected, "no partial/truncated content on disk");
+});
+
+// 16. Every model in the chain failing is the global case: the job pauses,
+// then the scheduled auto-resume finishes it once the provider recovers.
+test("all models exhausted: pause, then real auto-resume completes the job", async () => {
+  const ctx2 = await spawnAdmin({
+    extraEnv: { GEN_MAX_ATTEMPTS: "2", GEN_PAUSE_RETRY_MS: "150" },
+  });
+  try {
+    const fail = { status: 503, type: "status" };
+    ctx2.crea.state.byModel = {
+      "gemini-3-7-flash": fail,
+      "gemini-3-8-flash": fail,
+      "grok-4-6": fail,
+      "mock-model": fail,
+    };
+    const res = await ctx2.api.post("/api/projects/test-proj/generate", {
+      instructions: "autoresume-test",
+      model: "mock-model",
+    });
+    assert.equal(res.status, 202);
+    const jobId = res.body.jobId;
+    const paused = await waitJob(ctx2.api, jobId, ["paused"], {
+      timeoutMs: 15_000,
+    });
+    assert.equal(paused.status, "paused");
+
+    // Provider recovers — the scheduled auto-resume finishes the job alone.
+    ctx2.crea.state.byModel = {};
+    ctx2.crea.state.behaviors.push(
+      { text: ANALYSIS, type: "stream" },
+      { text: pageText("index.mdx", "Главная"), type: "stream" },
+      { text: pageText("api.mdx", "API"), type: "stream" }
+    );
+    const job = await waitJob(ctx2.api, jobId, ["done"], {
+      timeoutMs: 15_000,
+    });
+    assert.equal(job.status, "done");
+    assert.ok(
+      (job.autoResumes || 0) >= 1,
+      "job must record at least one auto-resume round"
+    );
+  } finally {
+    await ctx2.stop();
+    ctx2.crea.server.close();
+  }
 });

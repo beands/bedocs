@@ -100,13 +100,21 @@ app.get(
 app.post(
   "/api/settings",
   asyncRoute(async (req, res) => {
-    const { creaAiKey, defaultModel, siteUrl } = req.body || {};
+    const { creaAiKey, defaultModel, fallbackModels, siteUrl } = req.body || {};
     const s = await readSettings();
     if (creaAiKey !== undefined && !String(creaAiKey).startsWith("***")) {
       s.creaAiKey = creaAiKey;
     }
     if (defaultModel) {
       s.defaultModel = defaultModel;
+    }
+    if (fallbackModels !== undefined) {
+      s.fallbackModels = (
+        Array.isArray(fallbackModels) ? fallbackModels : [fallbackModels]
+      )
+        .flatMap((m) => String(m).split(","))
+        .map((m) => m.trim())
+        .filter(Boolean);
     }
     if (siteUrl !== undefined) {
       s.siteUrl = String(siteUrl).replace(/\/+$/, "");

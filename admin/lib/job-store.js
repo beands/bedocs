@@ -172,7 +172,9 @@ export async function listJobs({ project, activeOnly } = {}) {
 
 export async function scanUnfinished() {
   const all = await listJobs();
-  return all.filter((j) => ["queued", "running"].includes(j.status));
+  // "paused" = global provider failure with a pending auto-resume; a server
+  // restart must not strand it.
+  return all.filter((j) => ["queued", "running", "paused"].includes(j.status));
 }
 
 export async function removeJobDir(jobId) {

@@ -44,4 +44,19 @@ export const GEN_POLL_MAX_MS = Number(env.GEN_POLL_MAX_MS || 360_000);
 export const GEN_DRAFT_FLUSH_MS = Number(env.GEN_DRAFT_FLUSH_MS || 500);
 export const GEN_MAX_CONTINUATIONS = Number(env.GEN_MAX_CONTINUATIONS || 4);
 
+// Model fallback chain: when a model exhausts its retries (or the request is
+// rejected outright), the job switches to the next model and keeps going.
+// "paused" is reserved for the global case — every model in the chain failed.
+export const GEN_FALLBACK_MODELS = (
+  env.GEN_FALLBACK_MODELS || "gemini-3-8-flash,gemini-3-7-flash,grok-4-6"
+)
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+// A fully-exhausted job pauses and auto-resumes after this cooldown —
+// the failure may be a temporary outage of the whole provider.
+export const GEN_PAUSE_RETRY_MS = Number(env.GEN_PAUSE_RETRY_MS || 60_000);
+// After this many exhausted rounds the job needs human attention.
+export const GEN_MAX_ROUNDS = Number(env.GEN_MAX_ROUNDS || 10);
+
 export const DEFAULT_MODEL = env.DEFAULT_MODEL || "gemini-2-5-flash";
